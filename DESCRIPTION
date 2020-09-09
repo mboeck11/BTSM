@@ -1,0 +1,23 @@
+Package: BTSM
+Title: Bayesian Time Series Models
+Version: 0.0.0.9000
+Authors: Maximilian Boeck [aut, cre] (<https://orcid.org/0000-0001-6024-8305>)
+Authors@R: c(person("Maximilian","Boeck",role=c("aut","cre"),email="maximilian.boeck@wu.ac.at",
+                    comment = c(ORCID = "0000-0001-6024-8305")))
+Maintainer: Maximilian Boeck <maximilian.boeck@wu.ac.at>
+Description: What the package does (one paragraph).
+License: GPL-3
+Encoding: UTF-8
+Language: en-US
+Depends: R (>= 2.10)
+Imports:
+   abind, bayesm, coda, GIGrvg, graphics, knitr, MASS, Matrix, methods, parallel, 
+   Rcpp (>= 1.0.3), stats, stochvol, utils, xts, zoo
+Suggests: 
+    testthat (>= 2.1.0),
+    rmarkdown
+LazyData: true
+LinkingTo: Rcpp, RcppArmadillo, RcppProgress, stochvol, GIGrvg
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.1.0
+VignetteBuilder: knitr
