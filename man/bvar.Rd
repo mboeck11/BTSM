@@ -4,25 +4,36 @@
 \alias{bvar}
 \title{Bayesian Vector Autoregression}
 \usage{
-bvar(
-  Yraw,
-  Wraw = NULL,
-  p,
-  nsave = 5000,
-  nburn = 5000,
-  cons = FALSE,
-  fcst = FALSE,
-  fhorz = 0,
-  h = 0,
-  sv = TRUE,
-  shrink.type = "lagwise",
-  sample_theta = FALSE,
-  cfit = FALSE,
-  store.post = TRUE,
-  crit_eig = 1,
-  Multiplier = 5,
-  prmean = 1
-)
+bvar(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE, h=0,
+            sv=TRUE, shrink.type="lagwise", sample_theta=FALSE,
+            cfit=FALSE, crit_eig=1.00, prmean=1)
+}
+\arguments{
+\item{Yraw}{Data in matrix form}
+
+\item{plag}{number of lags}
+
+\item{Wraw}{exogenous variables.}
+
+\item{draws}{number of saved draws.}
+
+\item{burnin}{number of burn-ins.}
+
+\item{cons}{If set to \code{TRUE} a constant is included.}
+
+\item{h}{holdout-sample.}
+
+\item{sv}{If set to \code{TRUE} stochastic volatility is enabled.}
+
+\item{shrink.type}{which kind of shrinkage should be applied. Either \code{global} or \code{lagwise}.}
+
+\item{sample_theta}{whether \code{theta} should be sampled}
+
+\item{cfit}{whether log-likelihood should be computed}
+
+\item{crit_eig}{critical eigenvalue}
+
+\item{prmean}{prior mean.}
 }
 \description{
 Bayesian Vector Autoregression
