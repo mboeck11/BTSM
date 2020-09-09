@@ -1,6 +1,6 @@
 Package: BTSM
 Title: Bayesian Time Series Models
-Version: 0.0.0.9000
+Version: 0.0.1
 Authors: Maximilian Boeck [aut, cre] (<https://orcid.org/0000-0001-6024-8305>)
 Authors@R: c(person("Maximilian","Boeck",role=c("aut","cre"),email="maximilian.boeck@wu.ac.at",
                     comment = c(ORCID = "0000-0001-6024-8305")))
