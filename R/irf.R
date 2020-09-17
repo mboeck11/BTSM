@@ -35,7 +35,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   start.irf <- Sys.time()
   if(verbose) cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
   #------------------------------ get stuff -------------------------------------------------------#
-  plag        <- x$args$p
+  plag        <- x$args$plag
   xglobal     <- x$args$Yraw
   Traw        <- nrow(xglobal)
   bigK        <- ncol(xglobal)
@@ -43,7 +43,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   A_large     <- x$store$A
   S_large     <- x$store$SIGMA
   xdat        <- xglobal[(plag+1):Traw,,drop=FALSE]
-  thindraws   <- x$args$nsave
+  thindraws   <- x$args$draws
   varNames    <- colnames(xglobal)
   #------------------------------ user checks  ---------------------------------------------------#
   # checks general
@@ -64,7 +64,10 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
     shockvar <- shock$var
     ident    <- shock$ident
     scal     <- shock$scal
-    if(is.null(scal)) scal <- 1
+    type     <- shock$type
+    if(is.null(type)) type <- "short-run"
+    if(is.null(scal)) scal <- rep(1,bigK)
+    if(length(scal)!=bigK) scal <- rep(scal,bigK)
     Rmed <- NULL
     shock.nr <- length(shock$var)
   }
@@ -89,6 +92,8 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
       sign.constr[[kk]]$scal<-ifelse(is.null(sign.constr[[kk]]$scal),1,sign.constr[[kk]]$scal)
     }
     scal <- unlist(sapply(sign.constr,function(x) x$scal))
+    type <- sign.constr$type
+    if(is.null(type)) type <- "short-run"
   }
   #------------------------------ assign irf function  ---------------------------------------------------#
   if(ident=="sign"){
@@ -267,8 +272,8 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   imp.obj <- applyfun(1:thindraws,function(irep){
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
-    imp.obj    <- irf(xdat=xdat,plag=plag,nhor=n.ahead,Amat=Amat,Smat=Smat,sign.constr=sign.constr,
-                      MaxTries=MaxTries,shock.nr=shock.nr)
+    imp.obj    <- irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,sign.constr=sign.constr,
+                      MaxTries=MaxTries,shock.nr=shock.nr,type=type)
     if(verbose){
       if(!is.null(sign.constr)){
         if(!any(is.null(imp.obj$rot))){
@@ -281,7 +286,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
     return(list(impl=imp.obj$impl,rot=imp.obj$rot))
   })
   for(irep in 1:thindraws){
-    if(is.na(imp.obj[[irep]]$impl)) next
+    if(all(is.na(imp.obj[[irep]]$impl))) next
     IRF_store[irep,,,] <- imp.obj[[irep]]$impl[,,shockvar,drop=FALSE]
     if(ident=="sign"){
       R_store[irep,,] <- imp.obj[[irep]]$rot
@@ -333,7 +338,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   Amat    <- apply(A_large,c(2,3),median)
   Smat    <- apply(S_large,c(2,3),median)
   if(ident=="sign"){
-    imp.obj    <- try(irf(xdat=xdat,plag=plag,nhor=n.ahead,Amat=Amat,Smat=Smat,shock=shock,
+    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shock=shock,
                           sign.constr=sign.constr,MaxTries=MaxTries,shock.nr=shock.nr),silent=TRUE)
     if(!is(imp.obj,"try-error")){
       Rmed<-imp.obj$rot
