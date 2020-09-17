@@ -11,12 +11,13 @@ Encoding: UTF-8
 Language: en-US
 Depends: R (>= 2.10)
 Imports:
-   GIGrvg, graphics, knitr, MASS, Matrix, methods, mvnfast, mvtnorm, parallel, 
+   abind, GIGrvg, graphics, knitr, MASS, Matrix, methods, mvnfast, mvtnorm, parallel, 
    Rcpp (>= 1.0.3), stats, stochvol, utils, xts, zoo
 Suggests: 
     testthat (>= 2.1.0),
     rmarkdown
 LazyData: true
 Roxygen: list(markdown = TRUE)
+LinkingTo: Rcpp, RcppArmadillo, RcppProgress, stochvol, GIGrvg
 RoxygenNote: 7.1.0
 VignetteBuilder: knitr

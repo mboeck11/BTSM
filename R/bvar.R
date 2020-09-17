@@ -1,8 +1,7 @@
 #' @name bvar
 #' @title Bayesian Vector Autoregression
-#' @usage bvar(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE, h=0,
-#'             sv=TRUE, shrink.type="lagwise", sample_theta=FALSE,
-#'             cfit=FALSE, crit_eig=1.00, prmean=1)
+#' @usage bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,
+#'             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 #' @param Data Data in matrix form
 #' @param plag number of lags
 #' @param draws number of saved draws.
@@ -22,10 +21,13 @@
 #' @export
 #' @importFrom MASS ginv
 #' @importFrom methods is
+#' @importFrom GIGrvg rgig
+#' @importFrom parallel parLapply mclapply
+#' @importFrom Rcpp evalCpp
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-bvar<-function(Data,W,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.bvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){
@@ -51,11 +53,11 @@ bvar<-function(Data,W,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=
   if(length(draws)>1 || draws<0 || length(burnin)>1 || burnin<0){
     stop("Please specify number of draws and burnin accordingly. One draws and burnin parameter for the whole model.")
   }
-  if(prior%in%c("NC","MN","SSVS","NG")){
+  if(!prior%in%c("NC","MN","SSVS","NG")){
     stop("Please choose an available prior specification.")
   }
   #-------------------------- construct arglist ----------------------------------------------------#
-  args <- .construct.arglist(bgvar)
+  args <- .construct.arglist(bvar)
   if(verbose){
     cat("\nStart estimation of Bayesian Vector Autoregression.\n\n")
     cat(paste("Prior: ",ifelse(prior=="MN","Minnesota prior",ifelse(prior=="SSVS","Stochastic Search Variable Selection prior","Normal-Gamma prior")),".\n",sep=""))
@@ -104,7 +106,6 @@ bvar<-function(Data,W,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=
       }
     }
   }
-  args$Ex <- Ex
   # check thinning factor
   if(thin<1){
     thin_mess <- paste("Thinning factor of ",thin," not possible. Adjusted to ",round(1/thin,2),".\n",sep="")
@@ -169,12 +170,7 @@ bvar<-function(Data,W,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts... ")
   start.estim <- Sys.time()
-  if(prior=="NC"){
-    globalpost <- .BVAR_natural_conjugate()
-  }else{
-    globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
-  }
-  names(globalpost) <- cN
+  globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
   end.estim <- Sys.time()
   diff.estim <- difftime(end.estim,start.estim,units="mins")
   mins <- round(diff.estim,0); secs <- round((diff.estim-floor(diff.estim))*60,0)
@@ -185,17 +181,13 @@ bvar<-function(Data,W,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=
   }else{
     trim<-eigen;eigen<-TRUE
   }
-  if(verbose) cat("Start stacking: \n")
-  # insert stacking function here
-  stacked.results <- .gvar.stacking.wrapper(xglobal=xglobal,plag=plag,globalpost=globalpost,draws=draws,thin=thin,trend=trend,eigen=eigen,trim=trim,verbose=verbose)
-  if(!is.null(trim)) {args$thindraws <- length(stacked.results$F.eigen)}
-  if(verbose) cat("\nStacking finished.\n")
+
+ # if(!is.null(trim)) {args$thindraws ###}
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
-                         "xglobal"=xglobal,
-                         "gW"=gW,
-                         "stacked.results"=stacked.results,
-                         "cc.results"=cc.results), class = "bvar")
+                         "Data"=Data,
+                         "post"=globalpost$post,
+                         "store"=globalpost$store), class = "bvar")
   end.bvar <- Sys.time()
   diff.bvar <- difftime(end.bvar,start.bvar,units="mins")
   mins.bvar <- round(diff.bvar,0); secs.bvar <- round((diff.bvar-floor(diff.bvar))*60,0)
@@ -449,14 +441,13 @@ bvar_old <- function(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE,
 
 #' @name bvar_natconj
 #' @title Bayesian Vector Autoregression with Natural Conjugate Prior setup
-#' @usage bvar(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE, h=0,
+#' @usage bvar(Yraw, plag, Wraw=NULL, draws=5000, cons=FALSE, h=0,
 #'             sv=TRUE, shrink.type="lagwise", sample_theta=FALSE,
 #'             cfit=FALSE, crit_eig=1.00, prmean=1)
 #' @param Yraw Data in matrix form
 #' @param plag number of lags
 #' @param Wraw exogenous variables.
 #' @param draws number of saved draws.
-#' @param burnin number of burn-ins.
 #' @param cons If set to \code{TRUE} a constant is included.
 #' @param h holdout-sample.
 #' @param sv If set to \code{TRUE} stochastic volatility is enabled.
@@ -466,7 +457,7 @@ bvar_old <- function(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE,
 #' @param crit_eig critical eigenvalue
 #' @param prmean prior mean.
 #' @export
-#' @importFrom stats rgamma rnorm quantile
+#' @importFrom stats rgamma rnorm quantile rWishart
 #' @importFrom mvnfast dmvn
 #' @importFrom mvtnorm rmvnorm dmvnorm rmvt
 #' @importFrom stochvol svsample2
@@ -480,7 +471,6 @@ bvar_natconj <- function(Yraw, plag, Wraw=NULL, draws=5000, cons=FALSE, h=0, cfi
   # if(!is.null(fixvar)) fixvar_pointer <- which(varnames == fixvar)
   if(!is.null(Wraw)) varnamesw <- colnames(Wraw) else varnamesw <- NULL
   #------------------------------Setup----------------------------------------------#
-  ntot <- burnin+draws
   M <- ncol(Yraw)
   Xraw <- cbind(.mlag(Yraw,plag))
   Y <- Yraw[(plag+1):(nrow(Yraw)-h),]
@@ -540,7 +530,7 @@ bvar_natconj <- function(Yraw, plag, Wraw=NULL, draws=5000, cons=FALSE, h=0, cfi
 
     # check stationarity
     Cm <- .gen_compMat(A_draw[1:K,],M,plag)$Cm
-    if(max(abs(Re(eigen(Cm)$values)))>crit_eig && irep > burnin && counter < (burnin+Multiplier*draws)){
+    if(max(abs(Re(eigen(Cm)$values)))>crit_eig && counter < (Multiplier*draws)){
       irep    <- irep
       counter <- counter+1
       next

@@ -8,7 +8,7 @@ using namespace Rcpp;
 
 // BVAR_linear
 List BVAR_linear(const SEXP Y_in, const SEXP W_in, const SEXP p_in, const SEXP draws_in, const SEXP burnin_in, const SEXP cons_in, const SEXP trend_in, const SEXP sv_in, const SEXP thin_in, const SEXP prior_in, const SEXP hyperparam_in, const SEXP Ex_in);
-RcppExport SEXP _BGVAR_BVAR_linear(SEXP Y_inSEXP, SEXP W_inSEXP, SEXP p_inSEXP, SEXP draws_inSEXP, SEXP burnin_inSEXP, SEXP cons_inSEXP, SEXP trend_inSEXP, SEXP sv_inSEXP, SEXP thin_inSEXP, SEXP prior_inSEXP, SEXP hyperparam_inSEXP, SEXP Ex_inSEXP) {
+RcppExport SEXP _BTSM_BVAR_linear(SEXP Y_inSEXP, SEXP W_inSEXP, SEXP p_inSEXP, SEXP draws_inSEXP, SEXP burnin_inSEXP, SEXP cons_inSEXP, SEXP trend_inSEXP, SEXP sv_inSEXP, SEXP thin_inSEXP, SEXP prior_inSEXP, SEXP hyperparam_inSEXP, SEXP Ex_inSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -30,7 +30,7 @@ END_RCPP
 }
 // do_rgig1
 double do_rgig1(double lambda, double chi, double psi);
-RcppExport SEXP _BGVAR_do_rgig1(SEXP lambdaSEXP, SEXP chiSEXP, SEXP psiSEXP) {
+RcppExport SEXP _BTSM_do_rgig1(SEXP lambdaSEXP, SEXP chiSEXP, SEXP psiSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -43,7 +43,7 @@ END_RCPP
 }
 // gvar_stacking
 List gvar_stacking(const SEXP xglobal_in, const SEXP plag_in, const SEXP globalpost_in, const SEXP draws_in, const SEXP thin_in, const SEXP trend_in, const SEXP eigen_in, const SEXP verbose_in);
-RcppExport SEXP _BGVAR_gvar_stacking(SEXP xglobal_inSEXP, SEXP plag_inSEXP, SEXP globalpost_inSEXP, SEXP draws_inSEXP, SEXP thin_inSEXP, SEXP trend_inSEXP, SEXP eigen_inSEXP, SEXP verbose_inSEXP) {
+RcppExport SEXP _BTSM_gvar_stacking(SEXP xglobal_inSEXP, SEXP plag_inSEXP, SEXP globalpost_inSEXP, SEXP draws_inSEXP, SEXP thin_inSEXP, SEXP trend_inSEXP, SEXP eigen_inSEXP, SEXP verbose_inSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -61,7 +61,7 @@ END_RCPP
 }
 // globalLik
 List globalLik(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const arma::cube Ginv_in, const SEXP thindraws_in);
-RcppExport SEXP _BGVAR_globalLik(SEXP Y_inSEXP, SEXP X_inSEXP, SEXP A_inSEXP, SEXP S_inSEXP, SEXP Ginv_inSEXP, SEXP thindraws_inSEXP) {
+RcppExport SEXP _BTSM_globalLik(SEXP Y_inSEXP, SEXP X_inSEXP, SEXP A_inSEXP, SEXP S_inSEXP, SEXP Ginv_inSEXP, SEXP thindraws_inSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -77,7 +77,7 @@ END_RCPP
 }
 // dmvnrm_arma_fast
 arma::vec dmvnrm_arma_fast(const arma::mat& x, const arma::mat& mean, const arma::mat& sigma, bool const logd);
-RcppExport SEXP _BGVAR_dmvnrm_arma_fast(SEXP xSEXP, SEXP meanSEXP, SEXP sigmaSEXP, SEXP logdSEXP) {
+RcppExport SEXP _BTSM_dmvnrm_arma_fast(SEXP xSEXP, SEXP meanSEXP, SEXP sigmaSEXP, SEXP logdSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -91,15 +91,15 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_BGVAR_BVAR_linear", (DL_FUNC) &_BGVAR_BVAR_linear, 12},
-    {"_BGVAR_do_rgig1", (DL_FUNC) &_BGVAR_do_rgig1, 3},
-    {"_BGVAR_gvar_stacking", (DL_FUNC) &_BGVAR_gvar_stacking, 8},
-    {"_BGVAR_globalLik", (DL_FUNC) &_BGVAR_globalLik, 6},
-    {"_BGVAR_dmvnrm_arma_fast", (DL_FUNC) &_BGVAR_dmvnrm_arma_fast, 4},
+    {"_BTSM_BVAR_linear", (DL_FUNC) &_BTSM_BVAR_linear, 12},
+    {"_BTSM_do_rgig1", (DL_FUNC) &_BTSM_do_rgig1, 3},
+    {"_BTSM_gvar_stacking", (DL_FUNC) &_BTSM_gvar_stacking, 8},
+    {"_BTSM_globalLik", (DL_FUNC) &_BTSM_globalLik, 6},
+    {"_BTSM_dmvnrm_arma_fast", (DL_FUNC) &_BTSM_dmvnrm_arma_fast, 4},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_BGVAR(DllInfo *dll) {
+RcppExport void R_init_BTSM(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }

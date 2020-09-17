@@ -4,36 +4,41 @@
 \alias{bvar}
 \title{Bayesian Vector Autoregression}
 \usage{
-bvar(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE, h=0,
-            sv=TRUE, shrink.type="lagwise", sample_theta=FALSE,
-            cfit=FALSE, crit_eig=1.00, prmean=1)
+bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,
+            Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 }
 \arguments{
-\item{Yraw}{Data in matrix form}
+\item{Data}{Data in matrix form}
 
 \item{plag}{number of lags}
-
-\item{Wraw}{exogenous variables.}
 
 \item{draws}{number of saved draws.}
 
 \item{burnin}{number of burn-ins.}
 
-\item{cons}{If set to \code{TRUE} a constant is included.}
+\item{prior}{which prior}
+
+\item{SV}{If set to \code{TRUE} stochastic volatility is enabled.}
 
 \item{h}{holdout-sample.}
 
-\item{sv}{If set to \code{TRUE} stochastic volatility is enabled.}
+\item{thin}{thinning factor}
 
-\item{shrink.type}{which kind of shrinkage should be applied. Either \code{global} or \code{lagwise}.}
+\item{hyperpara}{hyperparameter set}
 
-\item{sample_theta}{whether \code{theta} should be sampled}
+\item{eigen}{should eigenvalues be computed?}
 
-\item{cfit}{whether log-likelihood should be computed}
+\item{Ex}{exogenous variables to add to the model}
 
-\item{crit_eig}{critical eigenvalue}
+\item{cons}{If set to \code{TRUE} a constant is included.}
 
-\item{prmean}{prior mean.}
+\item{trend}{If set to \code{TRUE} a trend is included.}
+
+\item{applyfun}{parallelization}
+
+\item{cores}{number of cores}
+
+\item{verbose}{verbosity option}
 }
 \description{
 Bayesian Vector Autoregression

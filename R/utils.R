@@ -39,6 +39,16 @@
               Jm=Jm))
 }
 
+#' @name .divisors
+#' @noRd
+.divisors <- function (n,div) {
+  div <- round(div)
+  for(dd in div:1){
+    if(n%%div==0) break else div<-div-1
+  }
+  return(div)
+}
+
 #' @name .construct.arglist
 #' @noRd
 .construct.arglist = function (funobj, envir = NULL){
@@ -73,6 +83,27 @@
   return(logpost)
 }
 
+#' @name .atau_post
+#' @importFrom stats dgamma dexp
+#' @noRd
+.atau_post <- function(atau,lambda2,thetas,k,rat=1){
+  logpost <- sum(dgamma(thetas,atau,(atau*lambda2/2),log=TRUE))+dexp(atau,rate=rat,log=TRUE)
+  return(logpost)
+}
+
+#' @name .bernoulli
+#' @importFrom stats runif
+#' @noRd
+.bernoulli <- function(p){
+  u <- runif(1)
+  if (u<p){
+    x=0
+  }else{
+    x=1
+  }
+  return(x)
+}
+
 #' @name .get_V
 #' @noRd
 .get_V <- function(k=k,M=M,p=p,a_bar_1,a_bar_2,a_bar_3,a_bar_4,sigma_sq,cons=FALSE,trend=FALSE){
@@ -102,23 +133,24 @@
 
 #' @name .BVAR_linear_wrapper
 #' @noRd
+#' @importFrom abind adrop
 #' @importFrom utils capture.output
-.BVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Wraw){
-  class(Yraw) <- class(Wraw) <- "numeric"
+.BVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex){
+  class(Yraw) <- "numeric"
   prior_in <- ifelse(prior=="MN",1,ifelse(prior=="SSVS",2,3))
   if(default_hyperpara[["a_log"]]){
     default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   }
-  invisible(capture.output(bvar<-try(BVAR_linear(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Wraw)),type="message"))
+  invisible(capture.output(bvar<-try(BVAR_linear(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)),type="message"))
   if(is(bvar,"try-error")){
-    bvar<-.BVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Wraw)
+    bvar<-.BVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   }
   #------------------------------------------------ get data ----------------------------------------#
   Y <- bvar$Y; colnames(Y) <- colnames(Yraw); X <- bvar$X
   M <- ncol(Y); bigT <- nrow(Y); K <- ncol(X)
-  if(!is.null(Wraw)) Mex <- ncol(Wraw)
+  if(!is.null(Ex)) Mex <- ncol(Ex)
   xnames <- paste(rep("Ylag",M),rep(seq(1,plag),each=M),sep="")
-  if(!is.null(Wraw)) xnames <- c(xnames,paste(rep("Tex",Mex)))
+  if(!is.null(Ex)) xnames <- c(xnames,paste(rep("Tex",Mex)))
   if(cons)  xnames <- c(xnames,"cons")
   if(trend) xnames <- c(xnames,"trend")
   colnames(X) <- xnames
@@ -131,7 +163,7 @@
   if(trend){
     a1store     <- adrop(A_store[,which(dims=="trend"),,drop=FALSE],drop=2)
   }
-  if(!is.null(Exraw)){
+  if(!is.null(Ex)){
     Exstore     <- A_store[,which(dims=="Tex"),,drop=FALSE]
   }
   Phistore    <- NULL
@@ -193,15 +225,15 @@
                 shrink_store=shrink_store,gamma_store=gamma_store,omega_store=omega_store,lambda2_store=lambda2_store,tau_store=tau_store)
   #------------------------------------ compute posteriors -------------------------------------------#
   A_post      <- apply(A_store,c(2,3),median)
-  S_post      <- apply(SIGMA_store,c(2,3,4),median)
-  Sig         <- apply(SIGMA_post,c(2,3),mean)/(bigT-K)
+  S_post      <- apply(S_store,c(2,3,4),median)
+  Sig         <- apply(S_post,c(2,3),mean)/(bigT-K)
   theta_post  <- apply(theta_store,c(2,3),median)
   res_post    <- apply(res_store,c(2,3),median)
   # splitting up posteriors
   a0post <- a1post <- Expost <- NULL
   if(cons)  a0post <- A_post[which(dims=="cons"),,drop=FALSE]
   if(trend) a1post <- A_post[which(dims=="trend"),,drop=FALSE]
-  if(!is.null(Wraw)) Expost <- A_post[which(dims=="Tex"),,drop=FALSE]
+  if(!is.null(Ex)) Expost <- A_post[which(dims=="Tex"),,drop=FALSE]
   Phipost     <- NULL
   for(jj in 1:plag){
     Phipost    <- rbind(Phipost,A_post[which(dims==paste("Ylag",jj,sep="")),,drop=FALSE])
@@ -576,7 +608,7 @@
         A.prior   <- A_prior[slct.i,,drop=FALSE]
         theta.lag <- theta[slct.i,,drop=FALSE]
 
-        M.end <- ncol(A.lag.star)*nrow(A.lag.star)
+        M.end <- nrow(A.lag)
         if (ss==1){
           lambda2_A[ss+1,1] <- rgamma(1,d_lambda+A_tau[ss+1,1]*M.end,e_lambda+A_tau[ss+1,1]/2*sum(theta.lag))
         }else{
