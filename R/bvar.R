@@ -1,6 +1,7 @@
 #' @name bvar
 #' @title Bayesian Vector Autoregression
-#' @usage bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,
+#' @usage bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
+#'              hyperpara=NULL,eigen=FALSE,
 #'             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 #' @param Data Data in matrix form
 #' @param plag number of lags
@@ -123,7 +124,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   args$thindraws <- draws/thin
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
-  default_hyperpara <- list(c=10, # hyperparameter setup for natural conjugate case
+  default_hyperpara <- list(c=10, Multiplier=10, # hyperparameter setup for natural conjugate case
                             a_1=0.01,b_1=0.01, prmean=0,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
                             shrink1=0.1,shrink2=0.2,shrink3=10^2,shrink4=0.1, # MN
@@ -141,7 +142,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
         next
       }
       default_hyperpara[para] <- hyperpara[para]
-      if(para=="a_start") a_log <- FALSE
+      if(para=="a_start") default_hyperpara["a_log"] <- FALSE
     }
     if(verbose) cat("Default values for chosen hyperparamters overwritten.\n")
   }
@@ -168,21 +169,21 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   }
   if(is.null(cores)) {cores <- 1}
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
-  if(verbose) cat("\nEstimation of model starts... ")
-  start.estim <- Sys.time()
-  globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
-  end.estim <- Sys.time()
-  diff.estim <- difftime(end.estim,start.estim,units="mins")
-  mins <- round(diff.estim,0); secs <- round((diff.estim-floor(diff.estim))*60,0)
-  if(verbose) cat(paste(" took ",mins," ",ifelse(mins==1,"min","mins")," ",secs, " ",ifelse(secs==1,"second.","seconds.\n"),sep=""))
-  #--------------------------- stacking part for global model -----------------------------------------------------#
+  if(verbose) cat("\nEstimation of model starts...\n")
+  globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
+  #--------------------------- checking eigenvalues ----------------------------------------------------------#
   if(is.logical(eigen)){
-    if(eigen){trim<-1.05}else{trim<-NULL}
+    if(eigen){trim<-1.00}else{trim<-NULL}
   }else{
     trim<-eigen;eigen<-TRUE
   }
-
- # if(!is.null(trim)) {args$thindraws ###}
+  if(eigen){
+    A.eigen <- applyfun(1:args$thindraws,function(irep){
+      Cm <- .gen_compMat(globalpost$store$A_store[irep,,],ncol(Yraw),plag)$Cm
+      return(max(abs(Re(eigen(Cm)$values))))
+    })
+    globalpost$post$A.eigen <- unlist(A.eigen)
+  }
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
                          "Data"=Data,
@@ -191,16 +192,45 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   end.bvar <- Sys.time()
   diff.bvar <- difftime(end.bvar,start.bvar,units="mins")
   mins.bvar <- round(diff.bvar,0); secs.bvar <- round((diff.bvar-floor(diff.bvar))*60,0)
-  if(verbose) cat(paste("\n Needed time for estimation of bgvar: ",mins.bvar," ",ifelse(mins.bvar==1,"min","mins")," ",secs.bvar, " ",ifelse(secs.bvar==1,"second.","seconds.\n"),sep=""))
+  if(verbose) cat(paste("\n Needed time for estimation of bvar: ",mins.bvar," ",ifelse(mins.bvar==1,"min","mins")," ",secs.bvar, " ",ifelse(secs.bvar==1,"second.","seconds.\n"),sep=""))
   return(out)
 }
 
+#' @method print bvar
+#' @export
+#' @importFrom utils object.size
+print.bvar<-function(x, ...){
+  cat("---------------------------------------------------------------------------------------")
+  cat("\n")
+  cat("Model Info:")
+  cat("\n")
+  prior <- ifelse(x$args$prior=="NC","Natural-conjugate prior",ifelse(x$args$prior=="MN","Minnesota Prior",ifelse(x$args$prior=="SSVS",
+                  "Stochastic Search Variable Selection Prior",ifelse(x$args$prior=="NG","Normal Gamma Prior","not defined."))))
+  cat(paste("Prior: ",prior,sep=""))
+  cat("\n")
+  cat(paste("Nr. of lags: ",x$args$plag,sep=""))
+  cat("\n")
+  cat(paste("Nr. of posterior draws: ",x$args$draws,"/",x$args$thin,"=",floor(x$args$draws/x$args$thin),sep=""))
+  cat("\n")
+  cat(paste("Size of BVAR object: ",format(object.size(x),units="MB"),sep=""))
+  cat("\n")
+  if(x$args$eigen){
+    cat(paste("Model has ",sum(x$post$A.eigen<1)," stable draws.",sep=""))
+    cat("\n")
+    cat("---------------------------------------------------------------------------------------")
+  }
+  cat("\n")
+  cat("Model specification:")
+  cat("\n")
+  cat(colnames(x$args$yfull))
+  cat("\n")
+  invisible(x)
+}
 
 #' @name bvar_old
 #' @noRd
-#' @export
 bvar_old <- function(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE, h=0, sv=TRUE, shrink.type = "lagwise",
-                 sample_theta = FALSE, cfit=FALSE, crit_eig=1.00, prmean=1) {
+                    sample_theta = FALSE, cfit=FALSE, crit_eig=1.00, prmean=1) {
   args <- c(as.list(environment()))
   varnames<-colnames(Yraw)
   Multiplier <- 5
@@ -439,147 +469,3 @@ bvar_old <- function(Yraw, plag, Wraw=NULL, draws=5000, burnin=5000, cons=FALSE,
   return(out)
 }
 
-#' @name bvar_natconj
-#' @title Bayesian Vector Autoregression with Natural Conjugate Prior setup
-#' @usage bvar(Yraw, plag, Wraw=NULL, draws=5000, cons=FALSE, h=0,
-#'             sv=TRUE, shrink.type="lagwise", sample_theta=FALSE,
-#'             cfit=FALSE, crit_eig=1.00, prmean=1)
-#' @param Yraw Data in matrix form
-#' @param plag number of lags
-#' @param Wraw exogenous variables.
-#' @param draws number of saved draws.
-#' @param cons If set to \code{TRUE} a constant is included.
-#' @param h holdout-sample.
-#' @param sv If set to \code{TRUE} stochastic volatility is enabled.
-#' @param shrink.type which kind of shrinkage should be applied. Either \code{global} or \code{lagwise}.
-#' @param sample_theta whether \code{theta} should be sampled
-#' @param cfit whether log-likelihood should be computed
-#' @param crit_eig critical eigenvalue
-#' @param prmean prior mean.
-#' @export
-#' @importFrom stats rgamma rnorm quantile rWishart
-#' @importFrom mvnfast dmvn
-#' @importFrom mvtnorm rmvnorm dmvnorm rmvt
-#' @importFrom stochvol svsample2
-#' @importFrom MASS ginv
-#' @importFrom methods is
-bvar_natconj <- function(Yraw, plag, Wraw=NULL, draws=5000, cons=FALSE, h=0, cfit=FALSE, crit_eig=1.00, prmean=1) {
-  args <- c(as.list(environment()))
-  varnames<-colnames(Yraw)
-  Multiplier <- 5
-  c <- 10 # bigger => less information
-  # if(!is.null(fixvar)) fixvar_pointer <- which(varnames == fixvar)
-  if(!is.null(Wraw)) varnamesw <- colnames(Wraw) else varnamesw <- NULL
-  #------------------------------Setup----------------------------------------------#
-  M <- ncol(Yraw)
-  Xraw <- cbind(.mlag(Yraw,plag))
-  Y <- Yraw[(plag+1):(nrow(Yraw)-h),]
-  X <- Xraw[(plag+1):(nrow(Xraw)-h),]
-  if(!is.null(Wraw)){
-    Wex <- Wraw[(plag+1):(nrow(Wraw)),,drop=FALSE]
-    X <- cbind(X,Wex)
-    w<-ncol(Wex)
-  }else{w<-0}
-  if(cons) {X <- cbind(X,1);c<-1}else{c<-0}
-  bigT <- nrow(X)
-  K <- M*plag
-  k <- ncol(X)
-  v <- (M*(M-1))/2
-  #--------------------------Initialize Gibbs sampler--------------------------------#
-  A_OLS  <- try(solve(crossprod(X)) %*% crossprod(X,Y),silent=TRUE)
-  if(is(A_OLS,"try-error")) A_OLS <- ginv(crossprod(X)) %*% crossprod(X,Y)
-  S_OLS <- crossprod(Y - X %*% A_OLS)
-  #----------------------------PRIORS------------------------------------------------#
-  # prior mean for autoregressive parameters
-  A_prior <- matrix(0,k,M)
-  A_prior[1:M,1:M] <- diag(M)*prmean
-  # prior variance for autoregressive coefficients
-  V_prior    <- diag(k)
-  V_priorinv <- diag(1/diag(V_prior))
-  # prior degrees of scaling
-  v_prior <- 1
-  # prior scaling matrix
-  S_prior <- (1/c)*diag(M)
-  #---------------------POSTERIOR MOMENTS--------------------------------------------#
-  # posterior of coefficients
-  V_post <- solve(crossprod(X) + V_priorinv)
-  # A_post <- V_post %*% (crossprod(X)%*%A_OLS + V_priorinv%*%A_prior)
-  A_post <- V_post %*% (crossprod(X,Y) + V_priorinv%*%A_prior)
-  # posterior of variance
-  S_post <- S_OLS + S_prior + t(X%*%A_OLS)%*%X%*%A_OLS + t(A_prior)%*%V_priorinv%*%A_prior - t(A_post)%*%(V_priorinv + crossprod(X))%*%A_post
-  v_post <- v_prior + bigT
-  # posterior of coefficient variance for t-distribution
-  bigVpost  <- kronecker(S_post, V_post)/(v_post-M-1)
-  #---------------------------STORAGE-----------------------------------------------#
-  A_store                <- array(NA, c(draws, k, M))
-  dimnames(A_store)[[3]] <- varnames
-  Em_store               <- array(NA, c(draws, bigT, M))
-  S_store                <- array(NA, c(draws, M, M))
-  if(cfit) {
-    fit_store            <- array(NA, c(draws, bigT, M))
-    Lik_store            <- array(NA, c(draws, 1))
-  }
-  #-------------------MONTE CARLO SIMULATION----------------------------------------#
-  counter<-0
-  irep<-1
-  while(irep < (draws+1)){
-    # draw coefficients
-    Sinv_draw <- matrix(rWishart(1,v_post,solve(S_post)),M,M)
-    S_draw    <- solve(Sinv_draw)
-    A_draw    <- matrix(mvtnorm::rmvt(1, sigma=bigVpost, df=v_post, delta=as.vector(A_post)),k,M)
-
-    # check stationarity
-    Cm <- .gen_compMat(A_draw[1:K,],M,plag)$Cm
-    if(max(abs(Re(eigen(Cm)$values)))>crit_eig && counter < (Multiplier*draws)){
-      irep    <- irep
-      counter <- counter+1
-      next
-    }
-    # save everything
-    A_store[irep,,]  <- A_draw
-    S_store[irep,,]  <- S_draw
-    Em_store[irep,,] <- Y - X%*%A_draw
-
-    if(cfit) {
-      fit<-NULL;Lik<-0
-      for(tt in 1:bigT){
-        fit <- rbind(fit,X[tt,]%*%A_draw)
-        # use faster version of multivariate normal from mvnfast package
-        #Lik <- Lik + dmvnorm(Y[t,sl.country],fitt[t,],SIGMA[,,cc],log=TRUE)
-        Lik <- Lik + mvnfast::dmvn(Y[tt,],fit[tt,],S_draw,log=TRUE)
-      }
-    }
-    irep    <- irep+1
-    counter <- counter+1
-    if(irep%%50==0) print(paste0("Round: ",irep))
-  }
-  print(paste0("Needed rounds: ", counter, " for ", irep, " total rounds."))
-  #------------------------EX POST STUFF-------------------------------------#
-  store <- post <-  NULL
-  namespace    <- ls()
-  #---------------------store draws-------------------------------------------#
-  namestore    <- namespace[grepl("_store",namespace)]
-  store        <- lapply(namestore, get, envir=sys.frame(sys.parent(0)))
-  names(store) <- gsub("_store","",namestore)
-  #---------------------compute posteriors-------------------------------------#
-  quantile_set <- c(0.05,0.10,0.16,0.5,0.84,0.9,0.95)
-  quantile_nam <- c("q05","q10","q16","q50","q84","q90","q95")
-
-  for(nn in 1:length(namestore)){
-    temp        <- get(namestore[nn], envir=sys.frame(sys.parent(0)))
-    dims        <- 2:length(dim(temp))
-    post        <- lapply(quantile_set, function(q) apply(temp, dims, quantile, q,na.rm=TRUE))
-    names(post) <- quantile_nam
-    assign(gsub("store","post",namestore[nn]),post)
-  }
-
-  namepost     <- ls()[grepl("_post",ls())]
-  post         <- lapply(namepost, get, envir=sys.frame(sys.parent(0)))
-  names(post)  <- gsub("_post","",namepost)
-
-  # define output
-  out <- structure(list(post=post,
-                        store=store,
-                        args=args), class="bvar")
-  return(out)
-}

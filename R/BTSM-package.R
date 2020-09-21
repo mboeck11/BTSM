@@ -1,8 +1,6 @@
-#' @keywords internal
-"_PACKAGE"
-
-# The following block is used by usethis to automatically manage
-# roxygen namespace tags. Modify with care!
-## usethis namespace: start
-## usethis namespace: end
+#' @name BTSM
+#' @title BTSM: Bayesian Time Series Models
+#' @description This packages is a compendium of Bayesian Time Series Models...
+#' @docType package
+#' @useDynLib BTSM, .registration=TRUE
 NULL

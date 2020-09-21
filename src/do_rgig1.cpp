@@ -5,6 +5,7 @@
 using namespace Rcpp;
 
 //' @name do_rgig1
+//' @export
 //' @noRd
 //[[Rcpp::export]]
 double do_rgig1(double lambda, double chi, double psi) {

@@ -8,9 +8,9 @@ arma::mat mlag(const mat& X, const int lag, const int bigT, const int bigM) {
   // get dimensions
   //int bigT = X.n_rows;
   //int bigM = X.n_cols;
-  
+
   mat Xlag(bigT,bigM*lag,fill::zeros);
-  
+
   for(int pp=0; pp<lag; pp++){
     int colstart = pp*bigM;
     int colend   = (pp+1)*bigM-1;
@@ -42,23 +42,23 @@ double get_ar(mat& Yraw, int p){
   mat Xraw = mlag(Yraw,p,Traw,1);
   mat X = Xraw.submat(p,0,Traw-1,0);
   mat Y = Yraw.submat(p,0,Traw-1,0);
-  
+
   int T = Y.n_rows;
-  
-  vec trendvec(T); for(int tt=0; tt<T; tt++) {trendvec(tt)=tt+1;} 
+
+  vec trendvec(T); for(int tt=0; tt<T; tt++) {trendvec(tt)=tt+1;}
   X = join_rows(X,trendvec);
-  
+
   vec b_OLS = inv(X.t() * X) * X.t() * Y;
   vec e_OLS = Y - X * b_OLS;
   double s_OLS = dot(e_OLS.t(), e_OLS) / (T-p-1);
-  
+
   return s_OLS;
 }
 
-void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, double shrink4, bool cons, int Mstar, int p,
+void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, double shrink4, bool cons, int p,
                     bool trend){
   int k = V.n_rows; int M = V.n_cols;
-  
+
   // endogenous part
   for(int i=0; i < M; i++){ // equation - column
     for(int pp=1; pp <= p; pp++){
@@ -71,28 +71,23 @@ void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double 
       }
     }
   }
-  // exogenous part
-  if(Mstar > 0){
-    for(int i=0; i < M; i++){ // equation - column
-      for(int pp=0; pp <= p; pp++){
-        for(int j=0; j < Mstar; j++){
-          V(M*p+pp*Mstar+j,i) = shrink4 * sigmas(i)/(sigmas(M+j)*(pp+1));
-        }
-      }
-    }
-  }
   // deterministics
-  if(cons){
+  if(cons & trend){
     for(int i=0; i < M; i++){
       V(k-1,i) = shrink3*sigmas(i);
-      if(trend) V(k-2,i) = shrink3*sigmas(i);
+      V(k-2,i) = shrink3*sigmas(i);
+    }
+  }
+  if((!cons & trend) | (cons & !trend)){
+    for(int i=0; i < M; i++){
+      V(k-1,i) = shrink3*sigmas(i);
     }
   }
 }
 
 void inplace_tri_mat_mult(arma::rowvec &x, arma::mat const &trimat){
   arma::uword const n = trimat.n_cols;
-  
+
   for(unsigned j = n; j-- > 0;){
     double tmp(0.);
     for(unsigned i = 0; i <= j; ++i)
@@ -104,20 +99,20 @@ void inplace_tri_mat_mult(arma::rowvec &x, arma::mat const &trimat){
 //' @name dmvnrm_arma_fast
 //' @noRd
 //[[Rcpp::export]]
-arma::vec dmvnrm_arma_fast(const arma::mat& x,  
-                           const arma::mat& mean,  
-                           const arma::mat& sigma, 
-                           bool const logd = false) { 
+arma::vec dmvnrm_arma_fast(const arma::mat& x,
+                           const arma::mat& mean,
+                           const arma::mat& sigma,
+                           bool const logd = false) {
   // Import Rs chol function
   Environment base = Environment("package:base");
   Function Rchol = base["chol"];
-  
+
   double const log2pi = std::log(2.0 * M_PI);
   using arma::uword;
-  uword const n = x.n_rows, 
+  uword const n = x.n_rows,
     xdim = x.n_cols;
   arma::vec out(n);
-  
+
   // fall back on pivoting if Cholesky do not work
   mat Sig_chol;
   bool chol_success = chol(Sig_chol, sigma);
@@ -129,19 +124,19 @@ arma::vec dmvnrm_arma_fast(const arma::mat& x,
     uvec piv = sort_index(as<vec>(tmp.attr("pivot")));
     Sig_chol = cholV_tmp.cols(piv);
   }
-  
+
   arma::mat const rooti = arma::inv(trimatu(Sig_chol)); // arma::chol(sigma)
-  double const rootisum = arma::sum(log(rooti.diag())), 
-    constants = -(double)xdim/2.0 * log2pi, 
+  double const rootisum = arma::sum(log(rooti.diag())),
+    constants = -(double)xdim/2.0 * log2pi,
     other_terms = rootisum + constants;
-  
+
   arma::rowvec z;
   for (uword i = 0; i < n; i++) {
     z = (x.row(i) - mean.row(i));
     inplace_tri_mat_mult(z, rooti);
-    out(i) = other_terms - 0.5 * arma::dot(z, z);     
-  }  
-  
+    out(i) = other_terms - 0.5 * arma::dot(z, z);
+  }
+
   if (logd){
     return out;
   }else{
@@ -149,27 +144,55 @@ arma::vec dmvnrm_arma_fast(const arma::mat& x,
   }
 }
 
-arma::vec dmvnrm_arma_old(arma::mat& x,  
-                          arma::mat& mean,  
-                          arma::mat& sigma, 
-                          bool logd = false) { 
+arma::vec dmvnrm_arma_old(arma::mat& x,
+                          arma::mat& mean,
+                          arma::mat& sigma,
+                          bool logd = false) {
   double const log2pi = std::log(2.0 * M_PI);
   using arma::uword;
-  uword const n = x.n_rows, 
+  uword const n = x.n_rows,
     xdim = x.n_cols;
   arma::vec out(n);
   arma::mat rooti = arma::trans(arma::inv(trimatu(arma::chol(sigma))));
   double rootisum = arma::sum(log(rooti.diag()));
   double constants = -(double)xdim/2.0 * log2pi;
-  
+
   for (uword i = 0; i < n; i++) {
-    arma::vec z = rooti * arma::trans( x.row(i) - mean.row(i) ) ;    
-    out(i)      = constants - 0.5 * arma::sum(z%z) + rootisum;     
-  }  
-  
+    arma::vec z = rooti * arma::trans( x.row(i) - mean.row(i) ) ;
+    out(i)      = constants - 0.5 * arma::sum(z%z) + rootisum;
+  }
+
   if (logd)
     return out;
   return exp(out);
 }
 
+//' @name globalLik
+//' @noRd
+//[[Rcpp::export]]
+List globalLik(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const arma::cube Ginv_in, const SEXP thindraws_in) {
+  //----------------------------------------------------------------------------------------------------------------------
+  // GET INPUTS
+  //----------------------------------------------------------------------------------------------------------------------
+  NumericMatrix Yr(Y_in);
+  NumericMatrix Xr(X_in);
+  int bigT = Yr.nrow(), bigK = Yr.ncol(), bigKK = Xr.ncol();
+  mat Y(Yr.begin(), bigT, bigK, false);
+  mat X(Xr.begin(), bigT, bigKK, false);
 
+  const int thindraws  = as<int>(thindraws_in);
+  vec globalLik(thindraws, fill::zeros);
+  //----------------------------------------------------------------------------------------------------------------------
+  // Evaluate density
+  //----------------------------------------------------------------------------------------------------------------------
+  for(int irep = 0; irep < thindraws; irep++){
+    mat A       = A_in.row(irep);
+    mat S       = S_in.row(irep);
+    mat Ginv    = Ginv_in.row(irep);
+    mat Sig     = Ginv*S*Ginv.t();
+    mat mean    = X*A.t();
+    vec logLik  = dmvnrm_arma_fast(Y, mean, Sig, true);
+    globalLik.row(irep) = sum(logLik);
+  }
+  return List::create(Named("globalLik")=globalLik);
+}

@@ -3,31 +3,26 @@
 
 #' @name BVAR_linear
 #' @noRd
-BVAR_linear <- function(Y_in, W_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in) {
-    .Call('_BTSM_BVAR_linear', PACKAGE = 'BTSM', Y_in, W_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in)
+BVAR_linear <- function(Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in) {
+    .Call(`_BTSM_BVAR_linear`, Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in)
 }
 
 #' @name do_rgig1
+#' @export
 #' @noRd
 do_rgig1 <- function(lambda, chi, psi) {
-    .Call('_BTSM_do_rgig1', PACKAGE = 'BTSM', lambda, chi, psi)
-}
-
-#' @name gvar_stacking
-#' @noRd
-gvar_stacking <- function(xglobal_in, plag_in, globalpost_in, draws_in, thin_in, trend_in, eigen_in, verbose_in) {
-    .Call('_BTSM_gvar_stacking', PACKAGE = 'BTSM', xglobal_in, plag_in, globalpost_in, draws_in, thin_in, trend_in, eigen_in, verbose_in)
-}
-
-#' @name globalLik
-#' @noRd
-globalLik <- function(Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in) {
-    .Call('_BTSM_globalLik', PACKAGE = 'BTSM', Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in)
+    .Call(`_BTSM_do_rgig1`, lambda, chi, psi)
 }
 
 #' @name dmvnrm_arma_fast
 #' @noRd
 dmvnrm_arma_fast <- function(x, mean, sigma, logd = FALSE) {
-    .Call('_BTSM_dmvnrm_arma_fast', PACKAGE = 'BTSM', x, mean, sigma, logd)
+    .Call(`_BTSM_dmvnrm_arma_fast`, x, mean, sigma, logd)
+}
+
+#' @name globalLik
+#' @noRd
+globalLik <- function(Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in) {
+    .Call(`_BTSM_globalLik`, Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in)
 }
 

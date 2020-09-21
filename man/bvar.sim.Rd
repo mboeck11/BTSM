@@ -30,7 +30,7 @@ For testing purposes, this function enables to simulate time series processes wh
 }
 \examples{
 library(BTSM)
-sim <- bvar.sim(len=200, M=3, N=4, plag=2, cons=TRUE, trend=FALSE, SV=TRUE)
+sim <- bvar.sim(len=200, M=3, plag=1, cons=TRUE, trend=FALSE, SV=FALSE)
 Data = sim$obs$xglobal
 W    = sim$obs$W
 }

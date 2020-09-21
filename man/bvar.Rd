@@ -4,7 +4,8 @@
 \alias{bvar}
 \title{Bayesian Vector Autoregression}
 \usage{
-bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,
+bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
+             hyperpara=NULL,eigen=FALSE,
             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 }
 \arguments{

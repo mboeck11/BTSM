@@ -13,7 +13,7 @@
 #' @author Maximilian Boeck
 #' @examples
 #' library(BTSM)
-#' sim <- bvar.sim(len=200, M=3, N=4, plag=2, cons=TRUE, trend=FALSE, SV=TRUE)
+#' sim <- bvar.sim(len=200, M=3, plag=1, cons=TRUE, trend=FALSE, SV=FALSE)
 #' Data = sim$obs$xglobal
 #' W    = sim$obs$W
 #' @importFrom stats rnorm
@@ -35,10 +35,6 @@ bvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE){
     }
   }
   Yraw <- matrix(0,len,M)
-  if(M==3) {
-    vars <- c("y","inf","stir")
-    colnames(Yraw) <- colnames(shock) <- vars
-  }
 
   # state 0
   a0.true  <- rep(0,M)
@@ -68,11 +64,11 @@ bvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE){
     for(pp in 1:plag) xlag <- cbind(xlag,Yraw[tt-1,,drop=FALSE])
     if(cons){
       xlag <- cbind(xlag,1)
-      Abig <- cbind(Abig,a0.true)
+      Abig <- rbind(Abig,a0.true)
     }
     if(trend){
       xlag <- cbind(xlag,tt)
-      Abig <- cbind(Abig,a1.true)
+      Abig <- rbind(Abig,a1.true)
     }
     Yraw[tt,] <- xlag%*%Abig + t(t(chol(S.true[,,tt]))%*%rnorm(M))
   }
