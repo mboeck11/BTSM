@@ -72,9 +72,27 @@ bvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE){
     }
     Yraw[tt,] <- xlag%*%Abig + t(t(chol(S.true[,,tt]))%*%rnorm(M))
   }
+  #-----------------------------------------------------------------------------------------
+  temp <- .gen_compMat(A.true, M, plag)
+  Jm   <- temp$Jm
+  Cm   <- temp$Cm
 
+  # identification
+  shock <- t(chol(apply(S.true,c(1,2),median)))
+  diagonal <- diag(diag(shock))
+  shock <- solve(diagonal)%*%shock # unit initial shock
+
+  nhor    <- 60
+  impresp <- array(0, c(M, M, nhor))
+  impresp[,,1]  <- t(shock)
+  compMati <- Cm
+  for(j in 2:nhor) {
+    temp <- t(Jm) %*% compMati %*% Jm %*% shock
+    compMati <- compMati %*% Cm
+    impresp[,,j] <- temp
+  }
 
   true.list <- list(A.true=A.true, a0.true=a0.true, a1.true=a1.true, L.true=L.true, vol.true=vol.true, S.true=S.true)
 
-  return(list(Yraw=Yraw,true.list=true.list))
+  return(list(Yraw=Yraw,true.list=true.list,impresp.true=impresp))
 }

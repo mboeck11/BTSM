@@ -61,7 +61,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   args <- .construct.arglist(bvar)
   if(verbose){
     cat("\nStart estimation of Bayesian Vector Autoregression.\n\n")
-    cat(paste("Prior: ",ifelse(prior=="MN","Minnesota prior",ifelse(prior=="SSVS","Stochastic Search Variable Selection prior","Normal-Gamma prior")),".\n",sep=""))
+    cat(paste("Prior: ",ifelse(prior=="MN","Minnesota prior",ifelse(prior=="SSVS","Stochastic Search Variable Selection prior",ifelse(prior=="NG","Normal-Gamma prior","Natural conjugate prior"))),".\n",sep=""))
     cat(paste("Lag order: ",plag,"\n",sep=""))
     cat(paste("Stochastic volatility: ", ifelse(SV,"enabled","disabled"),".\n",sep=""))
   }
@@ -186,7 +186,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   }
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
-                         "Data"=Data,
+                         "xglobal"=xglobal,
                          "post"=globalpost$post,
                          "store"=globalpost$store), class = "bvar")
   end.bvar <- Sys.time()

@@ -199,13 +199,13 @@
       vola_post   <- apply(vola_store,c(2,3),median); pars_post <- NULL
     }
   }else if(prior=="NC"){
+    Smed_store  <- bvar$S_store
     for(irep in 1:(draws/thin)){
       for(tt in 1:bigT){
         S_store[irep,tt,,] <- bvar$S_store[irep,,]
       }
     }
     L_store     <- NULL
-    Smed_store  <- NULL
     theta_store <- NULL
     vola_store  <- NULL
     pars_store  <- NULL
@@ -1112,7 +1112,7 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
 #' @name .irf.sign.zero
 #' @noRd
 #' @importFrom MASS Null
-.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,shock,sign.constr,MaxTries,shock.nr,...){
+.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,shock,sign.constr,MaxTries,...){
   bigT     <- nrow(xdat)
   bigK     <- ncol(xdat)
   varNames <- colnames(xdat)
@@ -1275,9 +1275,6 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
           signCheckVec[kk,1] <- as.numeric(STempRow%*%IrfCheckTemp)
         }
       }
-      if(sum(abs(STemp))>0){
-        shock.nr <- which(unlist(lapply(sign.constr,function(l)l$shock==dimnames(S.cube)[3][[1]][ss])))
-      }
       signCheck[ss,] <- prod((signCheckVec > 0)*(signCheckVec > 0))
     }
     condall <- prod(signCheck)
@@ -1375,4 +1372,54 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   }
 
   return(list(impl=irfa,rot=NULL))
+}
+
+#' @name .impulsdtrf
+#' @noRd
+.impulsdtrf <- function(B,smat,nstep)
+  ### By:             As emerges from rfvar, neqn x nvar x lags array of rf VAR coefficients.
+  ### smat:           nshock x nvar matrix of initial shock vectors.  To produce "orthogonalized
+  ###                 impulse responses" it should have the property that crossprod(t(smat))=sigma,
+  ###                 where sigma is the Var(u(t)) matrix and u(t) is the rf residual vector.  One
+  ###                 way to get such a smat is to set smat=t(chol(sigma)).  To get the smat
+  ###                 corresponding to a different ordering, use
+  ###                 smat = t(chol(P %*% Sigma %*% t(P)) %*% P), where P is a permutation matrix.
+  ###                 To get impulse responses for a structural VAR in the form A(L)y=eps, with
+  ###                 Var(eps)=I, use B(L)=-A_0^(-1)A_+(L) (where A_+ is the coefficients on strictly
+  ###                 positive powers of L in A), smat=A_0^(-1).
+  ###                 In general, though, it is not required that smat be invertible.
+### response:       nvar x nshocks x nstep array of impulse responses.
+###
+### Code written by Christopher Sims,mat based on 6/03 matlab code.  This version 3/27/04.
+### Added dimension labeling, 8/02/04.
+{
+
+  neq <- dim(B)[1]
+  nvar <- dim(B)[2]
+  lags <- dim(B)[3]
+  dimnB <- dimnames(B)
+  if(dim(smat)[2] != dim(B)[2]) stop("B and smat conflict on # of variables")
+  response <- array(0,dim=c(neq,nvar,nstep+lags-1));
+  response[ , , lags] <- smat
+  response <- aperm(response, c(1,3,2))
+  irhs <- 1:(lags*nvar)
+  ilhs <- lags * nvar + (1:nvar)
+  response <- matrix(response, ncol=neq)
+  B <- B[, , seq(from=lags, to=1, by=-1)]  #reverse time index to allow matrix mult instead of loop
+  B <- matrix(B,nrow=nvar)
+  for (it in 1:(nstep-1)) {
+    response[ilhs, ] <- B %*% response[irhs, ]
+    irhs <- irhs + nvar
+    ilhs <- ilhs + nvar
+  }
+  dim(response) <- c(nvar, nstep + lags - 1, nvar)
+  #drop the zero initial conditions; array in usual format
+  if(lags>1){
+    response<-response[,-(1:(lags-1)),]
+  }
+  response <- aperm(response, c(1, 3, 2))
+  dimnames(response) <- list(dimnB[[1]], dimnames(smat)[[2]], NULL)
+  ## dimnames(response)[2] <- dimnames(smat)[1]
+  ## dimnames(response)[1] <- dimnames(B)[2]
+  return(response)
 }

@@ -1,10 +1,11 @@
 #' @name irf
 #' @title Impulse Response Function
-#' @usage irf(x, n.ahead=24, shock=NULL, sign.constr=NULL, save.store=FALSE,
+#' @usage irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE,
 #'            applyfun=NULL, cores=NULL, verbose=TRUE)
 #' @param x object of class \code{bvar}.
 #' @param n.ahead forecasting horizon.
-#' @param shock This is a list object. It should contain an entry labeled \code{var} that contains the name of the variable to be shocked. Finally it has to contain an entry labeled \code{ident} that is either \code{chol} if the shock is based on a short-run identification scheme done with the Cholesky decomposition or \code{girf} if generalized impulse responses should be calculated. In case impulses should be normalized (e.g., a +100bp increase in the interest rate), add another entry \code{scal} that contains a numeric value of the desired impact normalization.
+#' @param ident preferred identification scheme.
+#' @param scal scaling factor.
 #' @param sign.constr the user should submit a list containing the following entries \itemize{
 #' \item{\code{shock1}}{ is a list object that defines sign restrictions for a particular shock.}
 #' \itemize{
@@ -23,7 +24,7 @@
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
-"irf" <- function(x, n.ahead=24, shock=NULL, sign.constr=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE){
+"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE){
   UseMethod("irf", x)
 }
 
@@ -31,52 +32,32 @@
 #' @importFrom parallel parLapply mclapply
 #' @importFrom stats median
 #' @importFrom utils object.size
-irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.irf <- Sys.time()
   if(verbose) cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
   #------------------------------ get stuff -------------------------------------------------------#
   plag        <- x$args$plag
-  xglobal     <- x$args$Yraw
+  xglobal     <- x$args$Data
   Traw        <- nrow(xglobal)
   bigK        <- ncol(xglobal)
   bigT        <- Traw-plag
-  A_large     <- x$store$A
-  S_large     <- x$store$SIGMA
+  A_large     <- x$store$A_store
+  S_large     <- x$store$Smed_store
   xdat        <- xglobal[(plag+1):Traw,,drop=FALSE]
-  thindraws   <- x$args$draws
+  thindraws   <- x$args$thindraws
   varNames    <- colnames(xglobal)
   #------------------------------ user checks  ---------------------------------------------------#
   # checks general
-  if(is.null(shock)&&is.null(sign.constr)){
-    stop("Please provide either the list objects shock OR sign.constr to run GIRF / Cholesky or sign restriction based impulse response analysis.")
-  }
-  if(!is.null(shock)&&!is.null(sign.constr)){
-    stop("Please provide either the list objects shock OR sign.constr to run GIRF / Cholesky or sign restriction based impulse response analysis.")
-  }
-  # checks cholesky/girf
-  if(!is.null(shock)){
-    if(!all(c("var","ident")%in%names(shock))){
-      stop("Please provide list entries shock, ccode and ident for the object shock. See the help files for more details.")
-    }
-    if(!shock$ident%in%c("girf","chol")){
-      stop("Please provide identification scheme.")
-    }
-    shockvar <- shock$var
-    ident    <- shock$ident
-    scal     <- shock$scal
-    type     <- shock$type
-    if(is.null(type)) type <- "short-run"
-    if(is.null(scal)) scal <- rep(1,bigK)
-    if(length(scal)!=bigK) scal <- rep(scal,bigK)
-    Rmed <- NULL
-    shock.nr <- length(shock$var)
+  if(is.null(ident)){
+    stop("Please provide preferred identification scheme.")
   }
   # checks identification via sign restrictions
   if(!is.null(sign.constr)){
-    ident<-"sign"
+    if(ident!="sign"){
+      stop("Please select 'sign' as identification scheme when providing a list of sign restrictions.")
+    }
     # check MaxTries, if no MaxTries, set it to 7500
     MaxTries <- 7500
-    shock.nr <- length(sign.constr)
     if(!is.null(sign.constr$MaxTries)){
       MaxTries <- sign.constr$MaxTries
       sign.constr$MaxTries <- NULL
@@ -88,10 +69,11 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
       stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
     }
     # check scaling, if no scaling, set it to 1
+    scal <- rep(1,bigK)
     for(kk in 1:shock.nr){
       sign.constr[[kk]]$scal<-ifelse(is.null(sign.constr[[kk]]$scal),1,sign.constr[[kk]]$scal)
+      scal[which(sign.constr[[kk]]$shock==varNames)] <- sign.constr[[kk]]$scal
     }
-    scal <- unlist(sapply(sign.constr,function(x) x$scal))
     type <- sign.constr$type
     if(is.null(type)) type <- "short-run"
   }
@@ -113,7 +95,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
       if(length(aux$sign)!=mm || length(aux$rest.horz)!=mm){
         stop("Please specify M +1 signs, rest.horz and constr with M denoting the nr. of restrictions.")
       }
-      if(!any(unlist(aux$restrictions)%in%varNames)){
+      if(!any(unlist(aux$restrictions)%in%varNames) && !is.null(aux$restrictions)){
         stop("Please restrict variables available in the dataset. Respecify.")
       }
       #-------------------------------------------------------
@@ -226,29 +208,38 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
       }
     }
     strg.list <- NULL
-  }else if(ident=="chol"){
+  }else if(ident=="chol-shortrun"){
     if(verbose) {
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
-      cat(paste("Structural shock of interest: ", paste(shock$var,collapse=", "),".\n",sep=""))
     }
     irf <- .irf.chol
-    MaxTries<-str<-sign.constr<-Srots<-rot.nr<-NULL
-  }else{
+    type <- "short-run"
+    if(length(scal)==1) scal <- rep(scal,bigK)
+    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
+  }else if(ident=="girf"){
     if(verbose){
       cat("Identification scheme: Generalized impulse responses.\n")
-      cat(paste("Structural shock of interest: ", paste(shock$var,collapse=", "),".\n",sep=""))
     }
     irf <- .irf.girf
-    MaxTries<-str<-sign.constr<-rot.nr<-NULL
+    if(length(scal)==1) scal <- rep(scal,bigK)
+    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
+  }else if(ident=="chol-longrun"){
+    if(verbose){
+      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
+    }
+    irf <- .irf.chol
+    type <- "long-run"
+    if(length(scal)==1) scal <- rep(scal,bigK)
+    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }
 
   # initialize objects to save IRFs, HDs, etc.
   R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
-  IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,shock.nr));dimnames(IRF_store)[[3]] <- varNames
-  imp_posterior <- array(NA, dim=c(n.ahead,bigK,shock.nr,7))
+  IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
+  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,7))
   dimnames(imp_posterior)[[1]] <- 1:n.ahead
   dimnames(imp_posterior)[[2]] <- colnames(xglobal)
-  dimnames(imp_posterior)[[3]] <- paste("shock",shockvar,sep="_")
+  dimnames(imp_posterior)[[3]] <- paste("shock",colnames(xglobal),sep="_")
   dimnames(imp_posterior)[[4]] <- c("low05","low10","low16","median","high84","high90","high95")
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
@@ -273,7 +264,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
     imp.obj    <- irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,sign.constr=sign.constr,
-                      MaxTries=MaxTries,shock.nr=shock.nr,type=type)
+                      MaxTries=MaxTries,type=type)
     if(verbose){
       if(!is.null(sign.constr)){
         if(!any(is.null(imp.obj$rot))){
@@ -287,7 +278,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   })
   for(irep in 1:thindraws){
     if(all(is.na(imp.obj[[irep]]$impl))) next
-    IRF_store[irep,,,] <- imp.obj[[irep]]$impl[,,shockvar,drop=FALSE]
+    IRF_store[irep,,,] <- imp.obj[[irep]]$impl
     if(ident=="sign"){
       R_store[irep,,] <- imp.obj[[irep]]$rot
     }
@@ -315,7 +306,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
   # Normalization
   if(thindraws>0){
     if(!is.null(scal)){
-      for(z in 1:shock.nr){
+      for(z in 1:bigK){
         Mean<-IRF_store[,1,z,z]
         for(irep in 1:thindraws){
           IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scal[z]
@@ -323,7 +314,7 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
       }
     }
 
-    for(i in 1:shock.nr){
+    for(i in 1:bigK){
       imp_posterior[,,i,"low16"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.16,na.rm=TRUE)
       imp_posterior[,,i,"low10"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.10,na.rm=TRUE)
       imp_posterior[,,i,"low05"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.05,na.rm=TRUE)
@@ -347,13 +338,12 @@ irf.bvar <- function(x,n.ahead=24,shock=NULL,sign.constr=NULL,save.store=FALSE,a
     }
   }
   struc.obj <- list(Amat=Amat,Smat=Smat,Rmed=Rmed)
-  model.obj <- list(xglobal=xglobal,plag=plag)
+  model.obj <- list(xglobal=xglobal,plag=plag,cons=x$args$cons,trend=x$args$trend)
   #--------------------------------- prepare output----------------------------------------------------------------------#
   out <- structure(list("posterior"   = imp_posterior,
-                        "rot.nr"      = rot.nr,
-                        "shock"       = shock,
-                        "sign.constr" = sign.constr,
                         "ident"       = ident,
+                        "rot.nr"      = rot.nr,
+                        "sign.constr" = sign.constr,
                         "struc.obj"   = struc.obj,
                         "model.obj"   = model.obj),
                    class="bvar.irf")
