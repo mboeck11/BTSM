@@ -4,9 +4,9 @@
 \alias{bvec}
 \title{Bayesian Vector Error Correction Model}
 \usage{
-bvar(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
-             hyperpara=NULL,eigen=FALSE,
-             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
+bvec(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
+            hyperpara=NULL,eigen=FALSE,
+            Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 }
 \arguments{
 \item{Data}{Data in matrix form}
@@ -36,10 +36,6 @@ bvar(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
 \item{cons}{If set to \code{TRUE} a constant is included.}
 
 \item{trend}{If set to \code{TRUE} a trend is included.}
-
-\item{applyfun}{parallelization}
-
-\item{cores}{number of cores}
 
 \item{verbose}{verbosity option}
 }

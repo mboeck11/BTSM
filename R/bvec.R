@@ -1,8 +1,8 @@
 #' @name bvec
 #' @title Bayesian Vector Error Correction Model
-#' @usage bvar(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
-#'              hyperpara=NULL,eigen=FALSE,
-#'              Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
+#' @usage bvec(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
+#'             hyperpara=NULL,eigen=FALSE,
+#'             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 #' @param Data Data in matrix form
 #' @param plag number of lags
 #' @param r number of cointegration relationships
@@ -17,8 +17,6 @@
 #' @param Ex exogenous variables to add to the model
 #' @param cons If set to \code{TRUE} a constant is included.
 #' @param trend If set to \code{TRUE} a trend is included.
-#' @param applyfun parallelization
-#' @param cores number of cores
 #' @param verbose verbosity option
 #' @export
 #' @importFrom MASS ginv
@@ -29,7 +27,7 @@
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-bvec<-function(Data,plag=1,r=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,verbose=TRUE){
   start.bvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){
@@ -125,13 +123,12 @@ bvec<-function(Data,plag=1,r=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thi
   args$thindraws <- draws/thin
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
-  default_hyperpara <- list(c=10, Multiplier=10, # hyperparameter setup for natural conjugate case
-                            a_1=0.01,b_1=0.01, prmean=0,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
+  default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
                             shrink1=0.1,shrink2=0.2,shrink3=10^2,shrink4=0.1, # MN
                             tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS
                             e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE) # NG
-  paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
+  paras     <- c("a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
                  "shrink4","tau0","tau1","kappa0","kappa1","p_i","q_ij","e_lambda","d_lambda","a_start","sample_A")
   if(is.null(hyperpara)){
     if(verbose) cat("\t No hyperparameters are chosen, default setting applied.\n")
@@ -153,43 +150,14 @@ bvec<-function(Data,plag=1,r=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thi
   args$yfull <- Yraw
   xglobal    <- Yraw[1:(nrow(Yraw)-h),,drop=FALSE]
   args$time  <- args$time[1:(length(args$time)-h)]
-  #------------------------------ prepare applyfun --------------------------------------------------------#
-  if(is.null(applyfun)) {
-    applyfun <- if(is.null(cores)) {
-      lapply
-    } else {
-      if(.Platform$OS.type == "windows") {
-        cl_cores <- parallel::makeCluster(cores)
-        on.exit(parallel::stopCluster(cl_cores))
-        function(X, FUN, ...) parallel::parLapply(cl = cl_cores, X, FUN, ...)
-      } else {
-        function(X, FUN, ...) parallel::mclapply(X, FUN, ..., mc.cores =
-                                                   cores)
-      }
-    }
-  }
-  if(is.null(cores)) {cores <- 1}
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
-  globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
-  #--------------------------- checking eigenvalues ----------------------------------------------------------#
-  if(is.logical(eigen)){
-    if(eigen){trim<-1.00}else{trim<-NULL}
-  }else{
-    trim<-eigen;eigen<-TRUE
-  }
-  if(eigen){
-    A.eigen <- applyfun(1:args$thindraws,function(irep){
-      Cm <- .gen_compMat(globalpost$store$A_store[irep,,],ncol(Yraw),plag)$Cm
-      return(max(abs(Re(eigen(Cm)$values))))
-    })
-    globalpost$post$A.eigen <- unlist(A.eigen)
-  }
+  globalpost <- .BVEC_linear_wrapper(Yraw=Yraw,r=r,beta=beta,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
                          "xglobal"=xglobal,
                          "post"=globalpost$post,
-                         "store"=globalpost$store), class = "bvar")
+                         "store"=globalpost$store), class = "bvec")
   end.bvar <- Sys.time()
   diff.bvar <- difftime(end.bvar,start.bvar,units="mins")
   mins.bvar <- round(diff.bvar,0); secs.bvar <- round((diff.bvar-floor(diff.bvar))*60,0)

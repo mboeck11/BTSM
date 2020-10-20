@@ -125,7 +125,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
   default_hyperpara <- list(c=10, Multiplier=10, # hyperparameter setup for natural conjugate case
-                            a_1=0.01,b_1=0.01, prmean=0,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
+                            a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
                             shrink1=0.1,shrink2=0.2,shrink3=10^2,shrink4=0.1, # MN
                             tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS

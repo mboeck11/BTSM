@@ -32,7 +32,7 @@
 #' @importFrom parallel parLapply mclapply
 #' @importFrom stats median
 #' @importFrom utils object.size
-irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.irf <- Sys.time()
   if(verbose) cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
   #------------------------------ get stuff -------------------------------------------------------#
@@ -43,6 +43,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,save.store=
   bigT        <- Traw-plag
   A_large     <- x$store$A_store
   S_large     <- x$store$Smed_store
+  E_large     <- x$store$res_store
   xdat        <- xglobal[(plag+1):Traw,,drop=FALSE]
   thindraws   <- x$args$thindraws
   varNames    <- colnames(xglobal)
@@ -231,6 +232,17 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,save.store=
     type <- "long-run"
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
+  }else if(ident=="proxy"){
+    if(verbose){
+      cat("Identification schem: Identification via proxy variable.\n")
+    }
+    irf <- .irf.proxy
+    if(length(scal)==1) scal <- rep(scal,bigK)
+    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-type<-NULL
+    if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
+    if(nrow(proxy)!=bigT){
+      stop("Provide 'proxy' with same length as dataset.")
+    }
   }
 
   # initialize objects to save IRFs, HDs, etc.
@@ -263,8 +275,9 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,save.store=
   imp.obj <- applyfun(1:thindraws,function(irep){
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
+    Emat <- E_large[irep,,]
     imp.obj    <- irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,sign.constr=sign.constr,
-                      MaxTries=MaxTries,type=type)
+                      MaxTries=MaxTries,type=type,Emat=Emat,proxy=proxy)
     if(verbose){
       if(!is.null(sign.constr)){
         if(!any(is.null(imp.obj$rot))){

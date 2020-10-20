@@ -4,7 +4,7 @@
 \alias{irf}
 \title{Impulse Response Function}
 \usage{
-irf(x, n.ahead=24, shock=NULL, sign.constr=NULL, save.store=FALSE,
+irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE,
            applyfun=NULL, cores=NULL, verbose=TRUE)
 }
 \arguments{
@@ -12,7 +12,9 @@ irf(x, n.ahead=24, shock=NULL, sign.constr=NULL, save.store=FALSE,
 
 \item{n.ahead}{forecasting horizon.}
 
-\item{shock}{This is a list object. It should contain an entry labeled \code{var} that contains the name of the variable to be shocked. Finally it has to contain an entry labeled \code{ident} that is either \code{chol} if the shock is based on a short-run identification scheme done with the Cholesky decomposition or \code{girf} if generalized impulse responses should be calculated. In case impulses should be normalized (e.g., a +100bp increase in the interest rate), add another entry \code{scal} that contains a numeric value of the desired impact normalization.}
+\item{ident}{preferred identification scheme.}
+
+\item{scal}{scaling factor.}
 
 \item{sign.constr}{the user should submit a list containing the following entries \itemize{
 \item{\code{shock1}}{ is a list object that defines sign restrictions for a particular shock.}

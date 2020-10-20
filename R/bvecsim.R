@@ -12,10 +12,13 @@
 #' @return Returns a list with the following elements
 #' @author Maximilian Boeck
 #' @examples
-#' library(BTSM)
-#' sim <- bvar.sim(len=200, M=3, plag=1, cons=TRUE, trend=FALSE, SV=FALSE)
-#' Data = sim$obs$xglobal
-#' W    = sim$obs$W
+#' len <- 1000
+#' M <- 3
+#' plag <- 1
+#' include <- "none"
+#' B <- rbind(c(0.7, 0, 0, 0.4), c(0.6, -0.5, 0.2, 0), c(0.2, 0, 0.4, 0.9))
+#' beta <- c(1,-1,-1)
+#' yb <- bvec.sim(len=len, M=M, B=B, beta=beta, plag=plag, include=include)
 #' @importFrom stats rnorm
 #' @importFrom stochvol svsim
 #' @importFrom mnormt rmnorm
