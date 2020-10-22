@@ -17,6 +17,8 @@
 #' @param Ex exogenous variables to add to the model
 #' @param cons If set to \code{TRUE} a constant is included.
 #' @param trend If set to \code{TRUE} a trend is included.
+#' @param applyfun parallelization
+#' @param cores number of cores
 #' @param verbose verbosity option
 #' @export
 #' @importFrom MASS ginv
@@ -27,7 +29,7 @@
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,verbose=TRUE){
+bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.bvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){
@@ -150,9 +152,38 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
   args$yfull <- Yraw
   xglobal    <- Yraw[1:(nrow(Yraw)-h),,drop=FALSE]
   args$time  <- args$time[1:(length(args$time)-h)]
+  #------------------------------ prepare applyfun --------------------------------------------------------#
+  if(is.null(applyfun)) {
+    applyfun <- if(is.null(cores)) {
+      lapply
+    } else {
+      if(.Platform$OS.type == "windows") {
+        cl_cores <- parallel::makeCluster(cores)
+        on.exit(parallel::stopCluster(cl_cores))
+        function(X, FUN, ...) parallel::parLapply(cl = cl_cores, X, FUN, ...)
+      } else {
+        function(X, FUN, ...) parallel::mclapply(X, FUN, ..., mc.cores =
+                                                   cores)
+      }
+    }
+  }
+  if(is.null(cores)) {cores <- 1}
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
   globalpost <- .BVEC_linear_wrapper(Yraw=Yraw,r=r,beta=beta,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
+  #--------------------------- checking eigenvalues ----------------------------------------------------------#
+  if(is.logical(eigen)){
+    if(eigen){trim<-1.00}else{trim<-NULL}
+  }else{
+    trim<-eigen;eigen<-TRUE
+  }
+  if(eigen){
+    A.eigen <- applyfun(1:args$thindraws,function(irep){
+      Cm <- .gen_compMat(globalpost$store$A_store[irep,,],ncol(Yraw),plag+1)$Cm
+      return(max(abs(Re(eigen(Cm)$values))))
+    })
+    globalpost$post$A.eigen <- unlist(A.eigen)
+  }
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
                          "xglobal"=xglobal,

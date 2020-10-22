@@ -862,23 +862,24 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   colnames(X) <- xnames
   znames <- paste("ECM",seq(1,r),sep="")
   #-----------------------------------------get containers ------------------------------------------#
-  A_store <- bvec$A_store; dimnames(A_store)[[2]] <- c(znames,xnames); dimnames(A_store)[[3]] <- colnames(Y)
+  PHI_store <- bvec$PHI_store; dimnames(PHI_store)[[2]] <- c(znames,xnames); dimnames(PHI_store)[[3]] <- colnames(Y)
   beta_store <- bvec$beta_store; dimnames(beta_store)[[2]] <- colnames(Y); dimnames(beta_store)[[3]] <- paste0("ECM",seq(1,r))
   # splitting up stores
-  dims          <- dimnames(A_store)[[2]]
+  dims          <- dimnames(PHI_store)[[2]]
+  alpha_store   <- PHI_store[,which(dims==paste0("ECM",seq(1,r))),,drop=FALSE]
   a0store <- a1store <- Exstore <- NULL
   if(cons) {
-    a0store       <- adrop(A_store[,which(dims=="cons"),,drop=FALSE],drop=2)
+    a0store       <- adrop(PHI_store[,which(dims=="cons"),,drop=FALSE],drop=2)
   }
   if(trend){
-    a1store     <- adrop(A_store[,which(dims=="trend"),,drop=FALSE],drop=2)
+    a1store     <- adrop(PHI_store[,which(dims=="trend"),,drop=FALSE],drop=2)
   }
   if(!is.null(Ex)){
-    Exstore     <- A_store[,which(dims=="Tex"),,drop=FALSE]
+    Exstore     <- PHI_store[,which(dims=="Tex"),,drop=FALSE]
   }
-  Gammastore    <- NULL
+  Phistore    <- NULL
   for(jj in 1:plag){
-    Gammastore[[jj]]  <- A_store[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
+    Phistore[[jj]]  <- PHI_store[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
   }
   S_store <- array(NA, c(draws/thin,bigT,M,M)); dimnames(S_store) <- list(NULL,NULL,colnames(Y),colnames(Y))
   if(prior%in%c("MN","SSVS","NG")){
@@ -932,12 +933,36 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   }else{
     lambda2_store <- tau_store <- lambda2_post <- tau_post <- NULL
   }
-  store <- list(A_store=A_store,beta_store=beta_store,a0store=a0store,a1store=a1store,Gammastore=Gammastore,Exstore=Exstore,S_store=S_store,Smed_store=Smed_store,
+  Astore <- list()
+  for(jj in (plag+1):1){
+    Astore[[jj]] <- array(NA,c(draws,ncol(Y),ncol(Y)))
+    for(irep in 1:draws){
+      if(jj == (plag+1)){
+        Astore[[jj]][irep,,] <- -t(Phistore[[jj-1]][irep,,])
+      }else if(jj <= plag && jj > 1){
+        Astore[[jj]][irep,,] <- t(Phistore[[jj]][irep,,]) - t(Phistore[[jj-1]][irep,,])
+      }else if(jj == 1){
+        PItemp <- adrop(beta_store[irep,,,drop=FALSE],drop=1)%*%adrop(alpha_store[irep,,,drop=FALSE],drop=1)
+        Astore[[jj]][irep,,] <- diag(M) + PItemp - t(Phistore[[jj]][irep,,])
+      }
+    }
+  }
+  A_store <- array(NA,c(draws,ncol(Y)*(plag+1),ncol(Y)))
+  for(irep in 1:draws){
+    temp <- NULL
+    for(jj in 1:(plag+1)){
+      temp <- rbind(temp,t(Astore[[jj]][irep,,]))
+    }
+    A_store[irep,,] <- temp
+  }
+  store <- list(PHI_store=PHI_store,A_store=A_store,alpha_store=alpha_store,beta_store=beta_store,a0store=a0store,a1store=a1store,Phistore=Phistore,Astore=Astore,Exstore=Exstore,S_store=S_store,Smed_store=Smed_store,
                 L_store=L_store,theta_store=theta_store,vola_store=vola_store,pars_store=pars_store,res_store=res_store,
                 shrink_store=shrink_store,gamma_store=gamma_store,omega_store=omega_store,lambda2_store=lambda2_store,tau_store=tau_store)
   #------------------------------------ compute posteriors -------------------------------------------#
-  A_post      <- apply(A_store,c(2,3),median)
+  PHI_post    <- apply(PHI_store,c(2,3),median)
+  alpha_post  <- apply(alpha_store,c(2,3),median)
   beta_post   <- apply(beta_store,c(2,3),median)
+  A_post      <- apply(A_store,c(2,3),median)
   S_post      <- apply(S_store,c(2,3,4),median)
   Sig         <- apply(S_post,c(2,3),mean)/(bigT-K)
   theta_post  <- apply(theta_store,c(2,3),median)
@@ -951,7 +976,7 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   for(jj in 1:plag){
     Gammapost    <- rbind(Gammapost,A_post[which(dims==paste("Ylag",jj,sep="")),,drop=FALSE])
   }
-  post <- list(A_post=A_post,beta_post=beta_post,a0post=a0post,a1post=a1post,Gammapost=Gammapost,Expost=Expost,S_post=S_post,Sig=Sig,theta_post=theta_post,
+  post <- list(PHI_post=PHI_post,A_post=A_post,alpha_post=alpha_post,beta_post=beta_post,a0post=a0post,a1post=a1post,Gammapost=Gammapost,Expost=Expost,S_post=S_post,Sig=Sig,theta_post=theta_post,
                vola_post=vola_post,pars_post=pars_post,res_post=res_post,shrink_post=shrink_post,PIP=PIP,PIP_omega=PIP_omega,
                lambda2_post=lambda2_post,tau_post=tau_post)
   return(list(Y=Y,X=X,store=store,post=post))
@@ -1057,14 +1082,14 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
 
   XtXinv <- try(solve(crossprod(Xtilde)),silent=TRUE)
   if(is(XtXinv,"try-error")) XtXinv <- ginv(crossprod(Xtilde))
-  A_OLS  <- XtXinv%*%crossprod(Xtilde,Y)
-  E_OLS  <- Y - Xtilde%*%A_OLS
-  S_OLS  <- crossprod(E_OLS)/(bigT-k)
+  PHI_OLS  <- XtXinv%*%crossprod(Xtilde,Y)
+  E_OLS    <- Y - Xtilde%*%PHI_OLS
+  S_OLS    <- crossprod(E_OLS)/(bigT-k)
   #---------------------------------------------------------------------------------------------------------
   # Initial Values
   #---------------------------------------------------------------------------------------------------------
   beta_draw <- beta
-  A_draw    <- A_OLS
+  PHI_draw  <- PHI_OLS
   S_draw    <- array(S_OLS, c(M,M,bigT))
   Smed_draw <- S_OLS
   Smedinv   <- solve(S_OLS)
@@ -1076,9 +1101,9 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   # Priors on VAR coefs
   #-----------------------------
   # prior mean
-  A_prior <- matrix(0,kr,M)
-  A_prior[(r+1):(r+M),] <- diag(M)*prmean
-  a_prior  <-  as.vector(A_prior)
+  PHI_prior <- matrix(0,kr,M)
+  PHI_prior[(r+1):(r+M),] <- diag(M)*prmean
+  phi_prior  <-  as.vector(PHI_prior)
   # prior variance
   theta <- matrix(10,kr,M)
 
@@ -1116,12 +1141,12 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
     }
   }
   # NG stuff
-  lambda2_A    <- matrix(0.01,p,1)
-  A_tau        <- matrix(a_start,p,1)
-  colnames(A_tau) <- colnames(lambda2_A) <- "endo"
-  rownames(A_tau) <- rownames(lambda2_A) <- paste("lag.",seq(1,p),sep="")
-  A_tuning     <- matrix(.43,p,1)
-  A_accept     <- matrix(0,p,1)
+  lambda2_PHI    <- matrix(0.01,p,1)
+  PHI_tau        <- matrix(a_start,p,1)
+  colnames(PHI_tau) <- colnames(lambda2_PHI) <- "endo"
+  rownames(PHI_tau) <- rownames(lambda2_PHI) <- paste("lag.",seq(1,p),sep="")
+  PHI_tuning     <- matrix(.43,p,1)
+  PHI_accept     <- matrix(0,p,1)
   #------------------------------------
   # Priors on coefs in H matrix of VCV
   #------------------------------------
@@ -1189,7 +1214,7 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
   #---------------------------------------------------------------------------------------------------------
   # STORAGES
   #---------------------------------------------------------------------------------------------------------
-  A_store      <- array(NA,c(thindraws,kr,M))
+  PHI_store    <- array(NA,c(thindraws,kr,M))
   L_store      <- array(NA,c(thindraws,M,M))
   res_store    <- array(NA,c(thindraws,bigT,M))
   beta_store   <- array(NA,c(thindraws,M,r))
@@ -1223,35 +1248,35 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
 
         V_post <- try(chol2inv(chol(crossprod(X.i)+diag(1/theta[,mm]))),silent=TRUE)
         if (is(V_post,"try-error")) V_post <- ginv(crossprod(X.i)+diag(1/theta[,mm]))
-        A_post <- V_post%*%(crossprod(X.i,Y.i)+diag(1/theta[,mm])%*%A_prior[,mm])
+        PHI_post <- V_post%*%(crossprod(X.i,Y.i)+diag(1/theta[,mm])%*%PHI_prior[,mm])
 
-        A.draw.i <- try(A_post+t(chol(V_post))%*%rnorm(ncol(X.i)),silent=TRUE)
-        if (is(A.draw.i,"try-error")) A.draw.i <- mvrnorm(1,A_post,V_post)
-        A_draw[,mm] <- A.draw.i
-        Em[,mm] <-  Em_str[,mm] <- Y[,mm]-Xtilde%*%A.draw.i
+        PHI.draw.i <- try(PHI_post+t(chol(V_post))%*%rnorm(ncol(X.i)),silent=TRUE)
+        if (is(PHI.draw.i,"try-error")) PHI.draw.i <- mvrnorm(1,PHI_post,V_post)
+        PHI_draw[,mm] <- PHI.draw.i
+        Em[,mm] <-  Em_str[,mm] <- Y[,mm]-Xtilde%*%PHI.draw.i
       }else{
         Y.i <- Y[,mm,drop=FALSE]*exp(-0.5*Sv_draw[,mm])
         X.i <- cbind(Xtilde,Em[,1:(mm-1)])*exp(-0.5*Sv_draw[,mm])
 
         V_post <- try(chol2inv(chol((crossprod(X.i)+diag(1/c(theta[,mm],L_prior[mm,1:(mm-1)]))))),silent=TRUE)
         if (is(V_post,"try-error")) V_post <- ginv((crossprod(X.i)+diag(1/c(theta[,mm],L_prior[mm,1:(mm-1)]))))
-        A_post <- V_post%*%(crossprod(X.i,Y.i)+diag(1/c(theta[,mm],L_prior[mm,1:(mm-1)]))%*%c(A_prior[,mm],l_prior[mm,1:(mm-1)]))
+        PHI_post <- V_post%*%(crossprod(X.i,Y.i)+diag(1/c(theta[,mm],L_prior[mm,1:(mm-1)]))%*%c(PHI_prior[,mm],l_prior[mm,1:(mm-1)]))
 
-        A.draw.i <- try(A_post+t(chol(V_post))%*%rnorm(ncol(X.i)),silent=TRUE)
-        if (is(A.draw.i,"try-error")) A.draw.i <- mvrnorm(1,A_post,V_post)
+        PHI.draw.i <- try(PHI_post+t(chol(V_post))%*%rnorm(ncol(X.i)),silent=TRUE)
+        if (is(PHI.draw.i,"try-error")) PHI.draw.i <- mvrnorm(1,PHI_post,V_post)
 
-        A_draw[,mm] <- A.draw.i[1:ncol(Xtilde)]
-        Em[,mm] <- Y[,mm]-X%*%A.draw.i[1:ncol(X)]
-        Em_str[,mm] <- Y[,mm]-Xtilde%*%A.draw.i[1:ncol(Xtilde)]-Em[,1:(mm-1),drop=FALSE]%*%A.draw.i[(ncol(Xtilde)+1):ncol(X.i),drop=FALSE]
-        L_draw[mm,1:(mm-1)] <- A.draw.i[(ncol(Xtilde)+1):ncol(X.i)]
+        PHI_draw[,mm] <- PHI.draw.i[1:ncol(Xtilde)]
+        Em[,mm] <- Y[,mm]-X%*%PHI.draw.i[1:ncol(X)]
+        Em_str[,mm] <- Y[,mm]-Xtilde%*%PHI.draw.i[1:ncol(Xtilde)]-Em[,1:(mm-1),drop=FALSE]%*%PHI.draw.i[(ncol(Xtilde)+1):ncol(X.i),drop=FALSE]
+        L_draw[mm,1:(mm-1)] <- PHI.draw.i[(ncol(Xtilde)+1):ncol(X.i)]
       }
     }
-    rownames(A_draw) <- colnames(Xtilde)
+    rownames(PHI_draw) <- colnames(Xtilde)
     #----------------------------------------------------------------------------
     # Step 2: Sample beta
     if(draw_beta){
-      alph <- A_draw[1:r,,drop=FALSE]
-      AA   <- A_draw[(r+1):nrow(A_draw),,drop=FALSE]
+      alph  <- PHI_draw[1:r,,drop=FALSE]
+      AA    <- PHI_draw[(r+1):nrow(PHI_draw),,drop=FALSE]
       Yhat  <- as.vector(Y-X%*%AA)-kronecker(t(alph),Z)%*%bS
       Bmean <- crossprod(H,kronecker(alph%*%Smedinv,t(Z))%*%as.vector(Yhat))
       Bvar  <- t(H)%*%kronecker(alph%*%Smedinv%*%t(alph),crossprod(Z))%*%H
@@ -1275,8 +1300,8 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
     if(prior==2){
       for(mm in 1:M){
         for(kk in 1:kr){
-          u_i1  <-  dnorm(A_draw[kk,mm],A_prior[kk,mm],tau0[kk,mm]) * p_i
-          u_i2  <-  dnorm(A_draw[kk,mm],A_prior[kk,mm],tau1[kk,mm]) * (1-p_i)
+          u_i1  <-  dnorm(PHI_draw[kk,mm],PHI_prior[kk,mm],tau0[kk,mm]) * p_i
+          u_i2  <-  dnorm(PHI_draw[kk,mm],PHI_prior[kk,mm],tau1[kk,mm]) * (1-p_i)
           gst  <-  u_i1/(u_i1 + u_i2)
           if(gst=="NaN") gst <- 0
           gamma[kk,mm]  <-  .bernoulli(gst)
@@ -1332,27 +1357,27 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
       }
       # Normal-Gamma for endogenous variables
       for (ss in 1:p){
-        slct.i    <- which(rownames(A_draw)==paste("Ylag",ss,sep=""))
+        slct.i    <- which(rownames(PHI_draw)==paste("Ylag",ss,sep=""))
         if(ss==1){
-          slct.i <- c(which(rownames(A_draw)==paste("ECM",seq(1,r),sep="")),slct.i)
-          if(cons) slct.i <- c(slct.i,which(rownames(A_draw)=="cons"))
-          if(trend) slct.i <- c(slct.i,which(rownames(A_draw)=="trend"))
+          slct.i <- c(which(rownames(PHI_draw)==paste("ECM",seq(1,r),sep="")),slct.i)
+          if(cons) slct.i <- c(slct.i,which(rownames(PHI_draw)=="cons"))
+          if(trend) slct.i <- c(slct.i,which(rownames(PHI_draw)=="trend"))
         }
-        A.lag     <- A_draw[slct.i,,drop=FALSE]
-        A.prior   <- A_prior[slct.i,,drop=FALSE]
-        theta.lag <- theta[slct.i,,drop=FALSE]
+        PHI.lag     <- PHI_draw[slct.i,,drop=FALSE]
+        PHI.prior   <- PHI_prior[slct.i,,drop=FALSE]
+        theta.lag   <- theta[slct.i,,drop=FALSE]
 
-        M.end <- nrow(A.lag)
+        M.end <- nrow(PHI.lag)
         if (ss==1){
-          lambda2_A[ss,1] <- rgamma(1,d_lambda+A_tau[ss,1]*M.end^2,e_lambda+A_tau[ss,1]/2*sum(theta.lag))
+          lambda2_PHI[ss,1] <- rgamma(1,d_lambda+PHI_tau[ss,1]*M.end^2,e_lambda+PHI_tau[ss,1]/2*sum(theta.lag))
         }else{
-          lambda2_A[ss,1] <- rgamma(1,d_lambda+A_tau[ss,1]*M.end^2,e_lambda+A_tau[ss,1]/2*prod(lambda2_A[1:(ss-1),1])*sum(theta.lag))
+          lambda2_PHI[ss,1] <- rgamma(1,d_lambda+PHI_tau[ss,1]*M.end^2,e_lambda+PHI_tau[ss,1]/2*prod(lambda2_PHI[1:(ss-1),1])*sum(theta.lag))
         }
         for (jj in 1:M){
           for (ii in 1:M){
-            theta.lag[jj,ii] <- do_rgig1(lambda=A_tau[ss,1]-0.5,
-                                         chi=(A.lag[jj,ii]-A.prior[jj,ii])^2,
-                                         psi=A_tau[ss,1]*prod(lambda2_A[1:ss,1]))
+            theta.lag[jj,ii] <- do_rgig1(lambda=PHI_tau[ss,1]-0.5,
+                                         chi=(PHI.lag[jj,ii]-PHI.prior[jj,ii])^2,
+                                         psi=PHI_tau[ss,1]*prod(lambda2_PHI[1:ss,1]))
           }
         }
         theta[slct.i,] <- theta.lag
@@ -1360,19 +1385,19 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
         #TO BE MODIFIED
         if (sample_A){
           #Sample a_tau through a simple RWMH step (on-line tuning of the MH scaling within the first 50% of the burn-in phase)
-          A_tau_prop <- exp(rnorm(1,0,A_tuning[ss,1]))*A_tau[ss,1]
-          post_A_tau_prop <- .atau_post(atau=A_tau_prop,  thetas=as.vector(theta.lag), lambda2=prod(lambda2_A[1:ss,1]), k=length(theta.lag))
-          post_A_tau_old  <- .atau_post(atau=A_tau[ss,1], thetas=as.vector(theta.lag), lambda2=prod(lambda2_A[1:ss,1]), k=length(theta.lag))
-          post.diff <- post_A_tau_prop-post_A_tau_old
+          PHI_tau_prop <- exp(rnorm(1,0,PHI_tuning[ss,1]))*PHI_tau[ss,1]
+          post_PHI_tau_prop <- .atau_post(atau=PHI_tau_prop,  thetas=as.vector(theta.lag), lambda2=prod(lambda2_PHI[1:ss,1]), k=length(theta.lag))
+          post_PHI_tau_old  <- .atau_post(atau=PHI_tau[ss,1], thetas=as.vector(theta.lag), lambda2=prod(lambda2_PHI[1:ss,1]), k=length(theta.lag))
+          post.diff <- post_PHI_tau_prop-post_PHI_tau_old
           post.diff <- ifelse(is.nan(post.diff),-Inf,post.diff)
 
           if (post.diff > log(runif(1,0,1))){
-            A_tau[ss,1] <- A_tau_prop
-            A_accept[ss,1] <- A_accept[ss,1]+1
+            PHI_tau[ss,1]    <- PHI_tau_prop
+            PHI_accept[ss,1] <- PHI_accept[ss,1]+1
           }
           if (irep<(0.5*nburn)){
-            if ((A_accept[ss,1]/irep)>0.3)  A_tuning[ss,1] <- 1.01*A_tuning[ss,1]
-            if ((A_accept[ss,1]/irep)<0.15) A_tuning[ss,1] <- 0.99*A_tuning[ss,1]
+            if ((PHI_accept[ss,1]/irep)>0.3)  PHI_tuning[ss,1] <- 1.01*PHI_tuning[ss,1]
+            if ((PHI_accept[ss,1]/irep)<0.15) PHI_tuning[ss,1] <- 0.99*PHI_tuning[ss,1]
           }
         }
       }
@@ -1434,10 +1459,10 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
     # Step 4: store draws
     if(irep %in% thin.draws){
       count <- count+1
-      A_store[count,,] <- A_draw
+      PHI_store[count,,] <- PHI_draw
       beta_store[count,,] <- beta_draw
       L_store[count,,] <- L_draw
-      res_store[count,,] <- Y-Xtilde%*%A_draw
+      res_store[count,,] <- Y-Xtilde%*%PHI_draw
       P_store[count,,] <- P_mat
       # SV
       Sv_store[count,,] <- Sv_draw
@@ -1450,18 +1475,18 @@ bvar_natural_conjugate <- function(Y_in,p_in,draws_in,cons_in,trend_in,thin_in,q
       # NG
       theta_store[count,,]     <- theta
       lambda2_store[count,1,2] <- lambda2_L
-      lambda2_store[count,,1]  <- lambda2_A
+      lambda2_store[count,,1]  <- lambda2_PHI
       lambda2_store[count,1,3] <- lambda2_B
       tau_store[count,1,2]     <- L_tau
-      tau_store[count,,1]      <- A_tau
+      tau_store[count,,1]      <- PHI_tau
       tau_store[count,1,3]     <- B_tau
     }
   }
   #---------------------------------------------------------------------------------------------------------
   # END ESTIMATION
   #---------------------------------------------------------------------------------------------------------
-  dimnames(A_store)=list(NULL,colnames(Xtilde),colnames(A_OLS))
-  ret <- list(Y=Y,Z=Z,X=X,A_store=A_store,L_store=L_store,beta_store=beta_store,P_store=P_store,Sv_store=Sv_store,shrink_store=shrink_store,gamma_store=gamma_store,omega_store=omega_store,theta_store=theta_store,lambda2_store=lambda2_store,tau_store=tau_store,pars_store=pars_store,res_store=res_store)
+  dimnames(PHI_store)=list(NULL,colnames(Xtilde),colnames(PHI_OLS))
+  ret <- list(Y=Y,Z=Z,X=X,PHI_store=PHI_store,L_store=L_store,beta_store=beta_store,P_store=P_store,Sv_store=Sv_store,shrink_store=shrink_store,gamma_store=gamma_store,omega_store=omega_store,theta_store=theta_store,lambda2_store=lambda2_store,tau_store=tau_store,pars_store=pars_store,res_store=res_store)
   return(ret)
 }
 

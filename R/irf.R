@@ -24,12 +24,45 @@
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
-"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE){
+"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE){
   UseMethod("irf", x)
 }
 
 #' @export
-#' @importFrom parallel parLapply mclapply
+irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+  start.irf <- Sys.time()
+  if(verbose)  cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
+  if(ident=="chol-shortrun"){
+    if(verbose) {
+      cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
+    }
+  }else if(ident=="chol-longrun"){
+    if(verbose){
+      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
+    }
+  }else if(ident=="girf"){
+    if(verbose){
+      cat("Identification scheme: Generalized impulse responses.\n")
+    }
+  }else if(ident=="sign"){
+    if(verbose) {
+      cat("Identification scheme: identification via sign-restrictions.\n")
+    }
+  }else if(ident=="proxy"){
+    if(verbose){
+      cat("Identification schem: Identification via proxy variable.\n")
+    }
+  }
+  out <- irf.bvar(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=FALSE)
+  if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
+  end.irf <- Sys.time()
+  diff.irf <- difftime(end.irf,start.irf,units="mins")
+  mins.irf <- round(diff.irf,0); secs.irf <- round((diff.irf-floor(diff.irf))*60,0)
+  if(verbose) cat(paste("\nNeeded time for impulse response analysis: ",mins.irf," ",ifelse(mins.irf==1,"min","mins")," ",secs.irf, " ",ifelse(secs.irf==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @export
 #' @importFrom stats median
 #' @importFrom utils object.size
 irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
@@ -80,6 +113,9 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   }
   #------------------------------ assign irf function  ---------------------------------------------------#
   if(ident=="sign"){
+    if(verbose) {
+      cat("Identification scheme: identification via sign-restrictions.\n")
+    }
     irf<-.irf.sign.zero
     # first check whether all elements of sign restriction list have been specified
     res_len<-unlist(lapply(sign.constr, function(l){

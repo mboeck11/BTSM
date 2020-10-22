@@ -37,6 +37,10 @@ bvec(Data, plag=1, r=1, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
 
 \item{trend}{If set to \code{TRUE} a trend is included.}
 
+\item{applyfun}{parallelization}
+
+\item{cores}{number of cores}
+
 \item{verbose}{verbosity option}
 }
 \description{

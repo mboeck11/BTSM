@@ -3,6 +3,7 @@
 S3method(fevd,bvar.irf)
 S3method(hd,bvar.irf)
 S3method(irf,bvar)
+S3method(irf,bvec)
 S3method(lps,bvar.pred)
 S3method(predict,bvar)
 S3method(print,bvar)
