@@ -1,12 +1,10 @@
-#' @name bvec
-#' @title Bayesian Vector Error Correction Model
-#' @usage bvec(Data, plag=1, r=1, beta=NULL, draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
-#'             hyperpara=NULL,eigen=FALSE,
-#'             Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
+#' @name tvpbvar
+#' @title Time-varying parameter Bayesian Vector Autoregression
+#' @usage bvar(Data, plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
+#'              hyperpara=NULL,eigen=FALSE,
+#'              Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE)
 #' @param Data Data in matrix form
 #' @param plag number of lags
-#' @param r number of cointegration relationships.
-#' @param beta cointegration vector can be supplied, default is set to \code{NULL}.
 #' @param draws number of saved draws.
 #' @param burnin number of burn-ins.
 #' @param prior which prior
@@ -30,8 +28,8 @@
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
-  start.bvar <- Sys.time()
+tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+  start.tvpbvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){
     stop("Please provide the argument 'Data' either as 'matrix' object.")
@@ -60,10 +58,10 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
     stop("Please choose an available prior specification.")
   }
   #-------------------------- construct arglist ----------------------------------------------------#
-  args <- .construct.arglist(bvar)
+  args <- .construct.arglist(tvpbvar)
   if(verbose){
-    cat("\nStart estimation of Bayesian Vector Error Correction Model.\n\n")
-    cat(paste("Prior: ",ifelse(prior=="MN","Minnesota prior",ifelse(prior=="SSVS","Stochastic Search Variable Selection prior","Normal-Gamma prior")),".\n",sep=""))
+    cat("\nStart estimation of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
+    cat(paste("Prior: ",ifelse(prior=="NG","Normal-Gamma",""),".\n",sep=""))
     cat(paste("Lag order: ",plag,"\n",sep=""))
     cat(paste("Stochastic volatility: ", ifelse(SV,"enabled","disabled"),".\n",sep=""))
   }
@@ -128,11 +126,9 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
   if(verbose) cat("Hyperparameter setup: \n")
   default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
-                            shrink1=0.1,shrink2=0.2,shrink3=10^2,shrink4=0.1, # MN
-                            tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS
-                            e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE) # NG
-  paras     <- c("a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
-                 "shrink4","tau0","tau1","kappa0","kappa1","p_i","q_ij","e_lambda","d_lambda","a_start","sample_A")
+                            d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=FALSE) # NG
+  paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","d1","d2","e1","e2",
+                 "b_xi","b_tau","nu_xi","nu_tau","a_start","a_log","sample_A")
   if(is.null(hyperpara)){
     if(verbose) cat("\t No hyperparameters are chosen, default setting applied.\n")
   }
@@ -171,7 +167,7 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
   if(is.null(cores)) {cores <- 1}
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
-  globalpost <- .BVEC_linear_wrapper(Yraw=Yraw,r=r,beta=beta,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex)
+  globalpost <- .TVPBVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
   #--------------------------- checking eigenvalues ----------------------------------------------------------#
   if(is.logical(eigen)){
     if(eigen){trim<-1.00}else{trim<-NULL}
@@ -180,7 +176,7 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
   }
   if(eigen){
     A.eigen <- applyfun(1:args$thindraws,function(irep){
-      Cm <- .gen_compMat(globalpost$store$A_store[irep,,],ncol(Yraw),plag+1)$Cm
+      Cm <- .gen_compMat(apply(globalpost$store$A_store[irep,,,],c(2,3),median),ncol(Yraw),plag)$Cm
       return(max(abs(Re(eigen(Cm)$values))))
     })
     globalpost$post$A.eigen <- unlist(A.eigen)
@@ -189,10 +185,41 @@ bvec<-function(Data,plag=1,r=1,beta=NULL,draws=5000,burnin=5000,prior="NG",SV=TR
   out  <- structure(list("args"=args,
                          "xglobal"=xglobal,
                          "post"=globalpost$post,
-                         "store"=globalpost$store), class = "bvec")
-  end.bvar <- Sys.time()
-  diff.bvar <- difftime(end.bvar,start.bvar,units="mins")
-  mins.bvar <- round(diff.bvar,0); secs.bvar <- round((diff.bvar-floor(diff.bvar))*60,0)
-  if(verbose) cat(paste("\n Needed time for estimation of bvar: ",mins.bvar," ",ifelse(mins.bvar==1,"min","mins")," ",secs.bvar, " ",ifelse(secs.bvar==1,"second.","seconds.\n"),sep=""))
+                         "store"=globalpost$store), class = "bvar")
+  end.tvpbvar <- Sys.time()
+  diff.tvpbvar <- difftime(end.tvpbvar,start.tvpbvar,units="mins")
+  mins.tvpbvar <- round(diff.tvpbvar,0); secs.tvpbvar <- round((diff.tvpbvar-floor(diff.tvpbvar))*60,0)
+  if(verbose) cat(paste("\n Needed time for estimation of bvar: ",mins.tvpbvar," ",ifelse(mins.tvpbvar==1,"min","mins")," ",secs.tvpbvar, " ",ifelse(secs.tvpbvar==1,"second.","seconds.\n"),sep=""))
   return(out)
+}
+
+#' @method print bvar
+#' @export
+#' @importFrom utils object.size
+print.bvar<-function(x, ...){
+  cat("---------------------------------------------------------------------------------------")
+  cat("\n")
+  cat("Model Info:")
+  cat("\n")
+  prior <- ifelse(x$args$prior=="NC","Natural-conjugate prior",ifelse(x$args$prior=="MN","Minnesota Prior",ifelse(x$args$prior=="SSVS",
+                                                                                                                  "Stochastic Search Variable Selection Prior",ifelse(x$args$prior=="NG","Normal Gamma Prior","not defined."))))
+  cat(paste("Prior: ",prior,sep=""))
+  cat("\n")
+  cat(paste("Nr. of lags: ",x$args$plag,sep=""))
+  cat("\n")
+  cat(paste("Nr. of posterior draws: ",x$args$draws,"/",x$args$thin,"=",floor(x$args$draws/x$args$thin),sep=""))
+  cat("\n")
+  cat(paste("Size of BVAR object: ",format(object.size(x),units="MB"),sep=""))
+  cat("\n")
+  if(x$args$eigen){
+    cat(paste("Model has ",sum(x$post$A.eigen<1)," stable draws.",sep=""))
+    cat("\n")
+    cat("---------------------------------------------------------------------------------------")
+  }
+  cat("\n")
+  cat("Model specification:")
+  cat("\n")
+  cat(colnames(x$args$yfull))
+  cat("\n")
+  invisible(x)
 }

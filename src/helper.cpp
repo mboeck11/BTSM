@@ -55,8 +55,7 @@ double get_ar(mat& Yraw, int p){
   return s_OLS;
 }
 
-void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, double shrink4, bool cons, int p,
-                    bool trend){
+void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, double shrink4, bool cons, int p, bool trend){
   int k = V.n_rows; int M = V.n_cols;
 
   // endogenous part

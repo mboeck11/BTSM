@@ -1,6 +1,6 @@
 #' @name irf
 #' @title Impulse Response Function
-#' @usage irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE,
+#' @usage irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE,
 #'            applyfun=NULL, cores=NULL, verbose=TRUE)
 #' @param x object of class \code{bvar}.
 #' @param n.ahead forecasting horizon.
@@ -19,6 +19,7 @@
 #' \item{\code{MaxTries}}{ Optional numeric corresponding to the maximum tries to search for a rotation matrix that fulfills the user-specified restrictions. Default is set to 7500. After \code{MaxTries} unsuccessful tries the algorithm sets the impulse response for that specific posterior draw to \code{NA}.}
 #' \item{\code{shock2}}{ define a second list with the same arguments as \code{shock1} to identify a second shock. Can be used iteratively to identify multiple shocks.}
 #' }
+#' @param proxy in case of identification via proxy.
 #' @param save.store If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.
 #' @param applyfun Allows for user-specific apply function, which has to have the same interface than \code{lapply}. If \code{cores=NULL} then \code{lapply} is used, if set to a numeric either \code{parallel::parLapply()} is used on Windows platforms and \code{parallel::mclapply()} on non-Windows platforms.
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
@@ -378,7 +379,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   Amat    <- apply(A_large,c(2,3),median)
   Smat    <- apply(S_large,c(2,3),median)
   if(ident=="sign"){
-    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shock=shock,
+    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,
                           sign.constr=sign.constr,MaxTries=MaxTries,shock.nr=shock.nr),silent=TRUE)
     if(!is(imp.obj,"try-error")){
       Rmed<-imp.obj$rot

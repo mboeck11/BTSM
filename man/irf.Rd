@@ -4,7 +4,7 @@
 \alias{irf}
 \title{Impulse Response Function}
 \usage{
-irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE,
+irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE,
            applyfun=NULL, cores=NULL, verbose=TRUE)
 }
 \arguments{
@@ -29,6 +29,8 @@ irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, save.store=FALSE,
 \item{\code{MaxTries}}{ Optional numeric corresponding to the maximum tries to search for a rotation matrix that fulfills the user-specified restrictions. Default is set to 7500. After \code{MaxTries} unsuccessful tries the algorithm sets the impulse response for that specific posterior draw to \code{NA}.}
 \item{\code{shock2}}{ define a second list with the same arguments as \code{shock1} to identify a second shock. Can be used iteratively to identify multiple shocks.}
 }}
+
+\item{proxy}{in case of identification via proxy.}
 
 \item{save.store}{If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.}
 

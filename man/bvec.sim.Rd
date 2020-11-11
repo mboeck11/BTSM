@@ -4,20 +4,20 @@
 \alias{bvec.sim}
 \title{Simulating a Vector Error Correction Model}
 \usage{
-bvar.sim(len, M, plag=1, cons=FALSE, trend=FALSE, SV=FALSE)
+bvec.sim(len, M, B, beta, plag=1, include="none")
 }
 \arguments{
 \item{len}{length of the simulated time series.}
 
 \item{M}{number of endogenous variables.}
 
+\item{B}{matrix of coefficients.}
+
+\item{beta}{cointegrating vector.}
+
 \item{plag}{number of lags.}
 
-\item{cons}{logical indicating whether to include an intercept. Default set to \code{FALSE}.}
-
-\item{trend}{logical indicating whether to include an intercept. Default set to \code{FALSE}.}
-
-\item{SV}{logical indicating whether the process should be simulated with or without stochastic volatility. Default set to \code{FALSE}.}
+\item{include}{either "none", "const", "trend" or "both" for including deterministics.}
 }
 \value{
 Returns a list with the following elements

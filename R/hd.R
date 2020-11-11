@@ -91,7 +91,7 @@ hd.bvar.irf<-function(x, R=NULL, verbose=TRUE){
   #NOTE FOR MARTIN: IF SIGN RESTRICTIONS: R = ROTATION ELSE R = diag(M)
   solveA <- (Sigchol_u%*%R) #Depends on identification, if Cholesky then solveA = t(chol(SIGMA)), where SIGMA is the VC of the global model
   eps <- (YY-XX%*%Amat)%*%t(solve(solveA)) #Atilda is the matrix of autoregressive coefficients of the global model
-  Fcomp <- .gen_compMat(Amat, M, plag)$Cm
+  Fcomp <- .gen_compMat(Amat, bigK, plag)$Cm
 
   invA_big <- matrix(0,bigK*plag,bigK)  #M is the number of endogenous variables ; p is the number of lags
   invA_big[1:bigK,] <- solveA
@@ -120,7 +120,7 @@ hd.bvar.irf<-function(x, R=NULL, verbose=TRUE){
     # Trend
     if(trend){
       TT <- matrix(0,bigK*plag,1)
-      TT[1:bigK] <- t(ALPHA)[(bigK*plag)+2,]
+      TT[1:bigK] <- t(Amat)[(bigK*plag)+2,]
       HDtrend_big[,nn] <- TT+Fcomp%*%HDtrend_big[,nn-1]
       HDtrend[,nn] <- Icomp%*%HDtrend_big[,nn]
     }

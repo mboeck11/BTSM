@@ -26,3 +26,17 @@ globalLik <- function(Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in) {
     .Call(`_BTSM_globalLik`, Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in)
 }
 
+#' @name sample_McCausland
+#' @export
+#' @noRd
+sample_McCausland <- function(ystar, Fstar) {
+    .Call(`_BTSM_sample_McCausland`, ystar, Fstar)
+}
+
+#' @name MH_step
+#' @export
+#' @noRd
+MH_step <- function(current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2) {
+    .Call(`_BTSM_MH_step`, current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2)
+}
+

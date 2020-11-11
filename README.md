@@ -13,8 +13,7 @@ This repository should serve as a compendium of various Bayesian time series mod
 The latest development version can be installed from GitHub.
 
 ``` r
-install.packages("BGVAR")
-devtools::install_github("mboeck11/BGVAR")
+devtools::install_github("mboeck11/BTSM")
 ```
 
 Note that Mac OS needs gfortran binary packages to be installed. See also: https://gcc.gnu.org/wiki/GFortranBinaries.

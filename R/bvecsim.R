@@ -1,14 +1,14 @@
 #' @name bvec.sim
 #' @title Simulating a Vector Error Correction Model
 #' @description This function is used to produce simulated realizations which follow a Vector error correction model. It will also automatically simulate coefficients. All parameters can also be set by the user.
-#' @usage bvar.sim(len, M, plag=1, cons=FALSE, trend=FALSE, SV=FALSE)
+#' @usage bvec.sim(len, M, B, beta, plag=1, include="none")
 #' @details For testing purposes, this function enables to simulate time series processes which can be described by a Global Vector Autoregression. Since stability conditions are not checked, it is only implemented for \code{M=3}.
 #' @param len length of the simulated time series.
 #' @param M number of endogenous variables.
+#' @param B matrix of coefficients.
+#' @param beta cointegrating vector.
 #' @param plag number of lags.
-#' @param cons logical indicating whether to include an intercept. Default set to \code{FALSE}.
-#' @param trend logical indicating whether to include an intercept. Default set to \code{FALSE}.
-#' @param SV logical indicating whether the process should be simulated with or without stochastic volatility. Default set to \code{FALSE}.
+#' @param include either "none", "const", "trend" or "both" for including deterministics.
 #' @return Returns a list with the following elements
 #' @author Maximilian Boeck
 #' @examples

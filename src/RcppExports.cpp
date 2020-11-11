@@ -70,12 +70,45 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
+// sample_McCausland
+arma::mat sample_McCausland(arma::vec ystar, arma::mat Fstar);
+RcppExport SEXP _BTSM_sample_McCausland(SEXP ystarSEXP, SEXP FstarSEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< arma::vec >::type ystar(ystarSEXP);
+    Rcpp::traits::input_parameter< arma::mat >::type Fstar(FstarSEXP);
+    rcpp_result_gen = Rcpp::wrap(sample_McCausland(ystar, Fstar));
+    return rcpp_result_gen;
+END_RCPP
+}
+// MH_step
+double MH_step(double current_val, double c_tuning_par, int d, double scale_par, arma::vec param_vec, double b, double nu, double hyp1, double hyp2);
+RcppExport SEXP _BTSM_MH_step(SEXP current_valSEXP, SEXP c_tuning_parSEXP, SEXP dSEXP, SEXP scale_parSEXP, SEXP param_vecSEXP, SEXP bSEXP, SEXP nuSEXP, SEXP hyp1SEXP, SEXP hyp2SEXP) {
+BEGIN_RCPP
+    Rcpp::RObject rcpp_result_gen;
+    Rcpp::RNGScope rcpp_rngScope_gen;
+    Rcpp::traits::input_parameter< double >::type current_val(current_valSEXP);
+    Rcpp::traits::input_parameter< double >::type c_tuning_par(c_tuning_parSEXP);
+    Rcpp::traits::input_parameter< int >::type d(dSEXP);
+    Rcpp::traits::input_parameter< double >::type scale_par(scale_parSEXP);
+    Rcpp::traits::input_parameter< arma::vec >::type param_vec(param_vecSEXP);
+    Rcpp::traits::input_parameter< double >::type b(bSEXP);
+    Rcpp::traits::input_parameter< double >::type nu(nuSEXP);
+    Rcpp::traits::input_parameter< double >::type hyp1(hyp1SEXP);
+    Rcpp::traits::input_parameter< double >::type hyp2(hyp2SEXP);
+    rcpp_result_gen = Rcpp::wrap(MH_step(current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2));
+    return rcpp_result_gen;
+END_RCPP
+}
 
 static const R_CallMethodDef CallEntries[] = {
     {"_BTSM_BVAR_linear", (DL_FUNC) &_BTSM_BVAR_linear, 11},
     {"_BTSM_do_rgig1", (DL_FUNC) &_BTSM_do_rgig1, 3},
     {"_BTSM_dmvnrm_arma_fast", (DL_FUNC) &_BTSM_dmvnrm_arma_fast, 4},
     {"_BTSM_globalLik", (DL_FUNC) &_BTSM_globalLik, 6},
+    {"_BTSM_sample_McCausland", (DL_FUNC) &_BTSM_sample_McCausland, 2},
+    {"_BTSM_MH_step", (DL_FUNC) &_BTSM_MH_step, 9},
     {NULL, NULL, 0}
 };
 
