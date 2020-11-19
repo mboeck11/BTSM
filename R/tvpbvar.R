@@ -28,7 +28,7 @@
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.tvpbvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){
@@ -54,14 +54,15 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin
   if(length(draws)>1 || draws<0 || length(burnin)>1 || burnin<0){
     stop("Please specify number of draws and burnin accordingly. One draws and burnin parameter for the whole model.")
   }
-  if(!prior%in%c("NG")){
+  if(!prior%in%c("TVP","TVP-NG","TTVP")){
     stop("Please choose an available prior specification.")
   }
   #-------------------------- construct arglist ----------------------------------------------------#
   args <- .construct.arglist(tvpbvar)
   if(verbose){
     cat("\nStart estimation of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
-    cat(paste("Prior: ",ifelse(prior=="NG","Normal-Gamma",""),".\n",sep=""))
+    cat(paste("Prior: ",ifelse(prior=="TVP","Standard TVP setup",ifelse(prior=="TVP-NG","TVP setup with Normal-Gamma shrinkage prior",
+                                                                        "Threshold-TVP prior")),".\n",sep=""))
     cat(paste("Lag order: ",plag,"\n",sep=""))
     cat(paste("Stochastic volatility: ", ifelse(SV,"enabled","disabled"),".\n",sep=""))
   }
@@ -124,9 +125,9 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin
   args$thindraws <- draws/thin
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
-  default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
+  default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=0,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
-                            d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=FALSE) # NG
+                            d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=TRUE) # TVP-NG
   paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","d1","d2","e1","e2",
                  "b_xi","b_tau","nu_xi","nu_tau","a_start","a_log","sample_A")
   if(is.null(hyperpara)){

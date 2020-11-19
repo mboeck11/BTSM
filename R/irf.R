@@ -25,7 +25,8 @@
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
-"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE){
+"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+                  quantiles=c(.05,.10,.16,.50,.84,.90,.95)){
   UseMethod("irf", x)
 }
 
@@ -65,8 +66,10 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
 
 #' @export
 #' @importFrom stats median
+#' @importFrom stringr str_pad
 #' @importFrom utils object.size
-irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+                     quantiles=c(.05,.10,.16,.50,.84,.90,.95)){
   start.irf <- Sys.time()
   if(verbose) cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
   #------------------------------ get stuff -------------------------------------------------------#
@@ -75,6 +78,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   Traw        <- nrow(xglobal)
   bigK        <- ncol(xglobal)
   bigT        <- Traw-plag
+  bigQ        <- length(quantiles)
   A_large     <- x$store$A_store
   S_large     <- x$store$Smed_store
   E_large     <- x$store$res_store
@@ -104,13 +108,18 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
     }
     # check scaling, if no scaling, set it to 1
-    scal <- rep(1,bigK)
-    for(kk in 1:shock.nr){
-      sign.constr[[kk]]$scal<-ifelse(is.null(sign.constr[[kk]]$scal),1,sign.constr[[kk]]$scal)
-      scal[which(sign.constr[[kk]]$shock==varNames)] <- sign.constr[[kk]]$scal
-    }
+    if(is.null(scal)) scal <- 1
+    if(length(scal)!=bigK) scal <- rep(scal,bigK)
     type <- sign.constr$type
     if(is.null(type)) type <- "short-run"
+    # check signs horizons
+    hh<-unlist(lapply(sign.constr,function(l)l$rest.horz))
+    if(any(hh==0)){
+      stop("Please provide contemporanous signs as horizon==1.")
+    }
+    if(any(hh>n.ahead)){
+      stop("Do not restrict anything after the impulse response horizon given by 'n.ahead'.")
+    }
   }
   #------------------------------ assign irf function  ---------------------------------------------------#
   if(ident=="sign"){
@@ -252,6 +261,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
     }
     irf <- .irf.chol
     type <- "short-run"
+    if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="girf"){
@@ -259,6 +269,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       cat("Identification scheme: Generalized impulse responses.\n")
     }
     irf <- .irf.girf
+    if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="chol-longrun"){
@@ -267,6 +278,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
     }
     irf <- .irf.chol
     type <- "long-run"
+    if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="proxy"){
@@ -274,6 +286,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       cat("Identification schem: Identification via proxy variable.\n")
     }
     irf <- .irf.proxy
+    if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-type<-NULL
     if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
@@ -285,11 +298,11 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   # initialize objects to save IRFs, HDs, etc.
   R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
   IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
-  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,7))
+  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,bigQ))
   dimnames(imp_posterior)[[1]] <- 1:n.ahead
   dimnames(imp_posterior)[[2]] <- colnames(xglobal)
   dimnames(imp_posterior)[[3]] <- paste("shock",colnames(xglobal),sep="_")
-  dimnames(imp_posterior)[[4]] <- c("low05","low10","low16","median","high84","high90","high95")
+  dimnames(imp_posterior)[[4]] <- paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {
@@ -355,23 +368,16 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   }
   # Normalization
   if(thindraws>0){
-    if(!is.null(scal)){
       for(z in 1:bigK){
         Mean<-IRF_store[,1,z,z]
         for(irep in 1:thindraws){
           IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scal[z]
         }
-      }
     }
-
     for(i in 1:bigK){
-      imp_posterior[,,i,"low16"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.16,na.rm=TRUE)
-      imp_posterior[,,i,"low10"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.10,na.rm=TRUE)
-      imp_posterior[,,i,"low05"]  <- apply(IRF_store[,,,i],c(2,3),quantile,0.05,na.rm=TRUE)
-      imp_posterior[,,i,"median"] <- apply(IRF_store[,,,i],c(2,3),median,na.rm=TRUE)
-      imp_posterior[,,i,"high84"] <- apply(IRF_store[,,,i],c(2,3),quantile,0.84,na.rm=TRUE)
-      imp_posterior[,,i,"high90"] <- apply(IRF_store[,,,i],c(2,3),quantile,0.90,na.rm=TRUE)
-      imp_posterior[,,i,"high95"] <- apply(IRF_store[,,,i],c(2,3),quantile,0.95,na.rm=TRUE)
+      for(q in 1:bigQ){
+        imp_posterior[,,i,q]  <- apply(IRF_store[,,,i],c(2,3),quantile,quantiles[q],na.rm=TRUE)
+      }
     }
   }
   # calculate objects needed for HD and struc shock functions later---------------------------------------------

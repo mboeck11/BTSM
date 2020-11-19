@@ -12,7 +12,7 @@ Language: en-US
 Depends: R (>= 2.10)
 Imports:
    abind, GIGrvg, graphics, knitr, MASS, Matrix, matrixcalc, methods, mnormt, mvnfast, mvtnorm, parallel, 
-   Rcpp (>= 1.0.3), stats, stochvol, utils, xts, zoo
+   Rcpp (>= 1.0.3), stats, stochvol, stringr, utils, xts, zoo
 Suggests: 
     testthat (>= 2.1.0),
     rmarkdown

@@ -178,11 +178,38 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
     trim<-eigen;eigen<-TRUE
   }
   if(eigen){
+    store <- globalpost$store
     A.eigen <- applyfun(1:args$thindraws,function(irep){
       Cm <- .gen_compMat(globalpost$store$A_store[irep,,],ncol(Yraw),plag)$Cm
       return(max(abs(Re(eigen(Cm)$values))))
     })
+    trim_eigen <- which(unlist(A.eigen)<trim)
+    store$A_store<-store$A_store[trim_eigen,,]
+    store$a0store<-store$a0store[trim_eigen]
+    store$a1store<-store$a1store[trim_eigen]
+    store$Phistore<-lapply(store$Phistore,function(l)l[trim_eigen,,])
+    if(!is.null(Ex)) store$Exstore<-store$Exstore[trim_eigen,]
+    store$S_store<-store$S_store[trim_eigen,,,]
+    store$Smed_store<-store$Smed_store[trim_eigen,,]
+    store$L_store<-store$L_store[trim_eigen,,]
+    store$theta_store<-store$theta_store[trim_eigen,,]
+    store$vola_store<-store$vola_store[trim_eigen,,]
+    store$pars_store<-store$pars_store[trim_eigen,,]
+    store$res_store<-store$res_store[trim_eigen,,]
+    if(prior=="MN"){
+      store$shrink_store<-store$shrink_store[trim_eigen,]
+    }
+    if(prior=="SSVS"){
+      store$gamma_store<-store$gamma_store[trim_eigen,,]
+      store$omega_store<-store$omega_store[trim_eigen,,]
+    }
+    if(prior=="NG"){
+      store$lambda2_store<-store$lambda2_store[trim_eigen,,]
+      store$tau_store<-store$tau_store[trim_eigen,,]
+    }
+    globalpost$store <- store
     globalpost$post$A.eigen <- unlist(A.eigen)
+    args$thindraws <- length(trim_eigen)
   }
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,

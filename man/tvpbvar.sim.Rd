@@ -18,6 +18,12 @@ tvpbvar.sim(len, M, plag=1, cons=FALSE, trend=FALSE, SV=FALSE)
 \item{trend}{logical indicating whether to include an intercept. Default set to \code{FALSE}.}
 
 \item{SV}{logical indicating whether the process should be simulated with or without stochastic volatility. Default set to \code{FALSE}.}
+
+\item{sparse.coef}{sparsification of coefficients, has to be provided as percentage between zero and one.}
+
+\item{sparse.tvp}{sparsification of time-variation, has to be provided as percentage between zero and one.}
+
+\item{tvp.var}{variance of state process governing the time-variation in the coefficients}
 }
 \value{
 Returns a list with the following elements
