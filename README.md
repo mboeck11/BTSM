@@ -22,14 +22,14 @@ Note that Mac OS needs gfortran binary packages to be installed. See also: https
 
 This package focuses on multivariate time series models estimated in a Bayesian fashion.
 
-| Model   | Estimation  | IRFs | Predictions | FEVD | HD  |
-|---------|-------------|------|-------------|------|-----|
-| Bayesian Vector Autoregression    | `bvar()`    | yes  | yes         | yes  | yes |
-| Bayesian Vector Error Correction Model    | `bvec()`    | yes  | no          | no   | no  |
-| Bayesian Interacted Vector Autoregression   | `bivar()`   | yes  | no          | no   | no  |
-| BPVAR   | `bpvar()`   | no   | no          | no   | no  |
-| BIPVAR  | no          | no   | no          | no   | no  |
-| TVPBVAR | `tvpbvar()` | no   | no          | no   | no  |
+| Model                                                 | Estimation  | IRFs | Predictions | FEVD | HD  |
+|-------------------------------------------------------|-------------|------|-------------|------|-----|
+| Bayesian Vector Autoregression                        | `bvar()`    | yes  | yes         | yes  | yes |
+| Bayesian Vector Error Correction Model                | `bvec()`    | yes  | no          | no   | no  |
+| Bayesian Interacted Vector Autoregression             | `bivar()`   | yes  | no          | no   | no  |
+| Bayesian Panel Vector Autoregressions                 | `bpvar()`   | no   | no          | no   | no  |
+| Bayesian Interacted Panel Vector Autoregression       | no          | no   | no          | no   | no  |
+| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | no   | no          | no   | no  |
 
 ## References
 
