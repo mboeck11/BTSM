@@ -33,7 +33,11 @@ This package focuses on multivariate time series models estimated in a Bayesian 
 
 ## References
 
+Arias, J.E., Rubio-Ramírez, J.F., and D.F. Waggoner (2018) Inference based on structural vector autoregressions identified with sign and zero restrictions: Theory and applications *Econometrica: Journal of the Econometric Society*, Vol. 86(2), pp. 685–720.
+
 Bitto, A. and S. Frühwirth-Schnatter (2019) Achieving shrinkage in a time-varying parameter model framework. *Journal of Econometrics*, Vol. 210(1), pp. 75-97.
+
+Doan, T., Litterman, R., and C. Sims (1984) Forecasting and conditional projection using realistic prior distributions *Econometric reviews*, Vol. 3(1), pp. 1–100.
 
 George E. I., Sun D., and S. Ni (2008) Bayesian stochastic search for VAR model restrictions. *Journal of Econometrics*, Vol. 142(1), pp. 553–580. 
 
@@ -47,7 +51,14 @@ Jarocinski, M. (2010) Responses to monetary policy shocks in the east and west o
 
 Kilian L., and H. Lütkepohl (2017) Structural Vector Autoregressive Analysis. *Cambridge University Press*.
 
+Mertens K., and M. O. Ravn (2013) The dynamic effects of personal and corporate income tax changes in the United States *The American Economic Review*, Vol. 103(4), pp. 1212–47.
+
+Rubio-Ramirez, J.F., Waggoner, D.F., and T. Zha (2010) Structural vector autoregressions: Theory of identification and
+algorithms for inference *The Review of Economic Studies*, Vol. 77(2), pp. 665–696.
+
 Sa, F., Towbin, P. and T. Wieladek (2014) Capital inflows, financial structure and housing booms. *Journal of the European Economic Association*, Vol. 12(2), pp. 522-546.
+
+Sims, C. A. (1980) Macroeconomics and reality. *Econometrica: Journal of the Econometric Society*, Vol 48(1), pp. 1–48.
 
 Towbin, P. and S. Weber (2013) Limits of floating exchange rates: The role of foreign currency debt and import structure. *Journal of Development Economics*, Vol. 101, pp. 179-194.
 
