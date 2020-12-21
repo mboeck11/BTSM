@@ -30,7 +30,6 @@ This package focuses on multivariate time series models estimated in a Bayesian 
 | BPVAR   | `bpvar()`   | no   | no          | no   | no  |
 | BIPVAR  | no          | no   | no          | no   | no  |
 | TVPBVAR | `tvpbvar()` | no   | no          | no   | no  |
-|---------|-------------|------|-------------|------|-----|
 
 ## References
 
