@@ -6,7 +6,7 @@
 [//]: # "[![total](http://cranlogs.r-pkg.org/badges/grand-total/BGVAR)](https://www.r-pkg.org/pkg/BGVAR)"
 <!-- badges: end -->
 
-This repository should serve as a compendium of various Bayesian time series models. It consists of estimation procedures and various functions for analysing time series data efficiently.
+This repository should serve as a compendium of various Bayesian time series models. It consists of estimation procedures and various functions for analysing time series data efficiently. This toolbox does not claim to be complete and will be expanded by demand of its users.
 
 ## Installation
 
@@ -30,6 +30,17 @@ This package focuses on multivariate time series models estimated in a Bayesian 
 | Bayesian Panel Vector Autoregressions                 | `bpvar()`   | no   | no          | no   | no  |
 | Bayesian Interacted Panel Vector Autoregression       | no          | no   | no          | no   | no  |
 | Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | no   | no          | no   | no  |
+
+We also provide S3methods for each function as summarized in the next table
+
+| Model                                                 | Function    | `print()` | `summary()` | `logLik()` | `coef()` | `vcov()` | `resid()` |
+|-------------------------------------------------------|-------------|-----------|-------------|------------|----------|----------|-----------|
+| Bayesian Vector Autoregression                        | `bvar()`    | yes       | yes         | yes        | no       | no       | no        |
+| Bayesian Vector Error Correction Model                | `bvec()`    | no        | no          | no         | no       | no       | no        |
+| Bayesian Interacted Vector Autoregression             | `bivar()`   | no        | no          | no         | no       | no       | no        |
+| Bayesian Panel Vector Autoregressions                 | `bpvar()`   | no        | no          | no         | no       | no       | no        |
+| Bayesian Interacted Panel Vector Autoregression       | no          | no        | no          | no         | no       | no       | no        |
+| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | no        | no          | no         | no       | no       | no        |
 
 ## References
 
