@@ -109,15 +109,13 @@
 .get_V <- function(k=k,M=M,p=p,a_bar_1,a_bar_2,a_bar_3,a_bar_4,sigma_sq,cons=FALSE,trend=FALSE){
   V_i <- matrix(0,k,M)
   # endogenous part
-  for(i in 1:M){
-    for(pp in 1:p){
-      for(j in 1:M){
+  for(i in 1:M){ # for each equation i
+    for(pp in 1:p){ # for each lag pp
+      for(j in 1:M){ # for each variable j
         if(i==j){
-          #V_i[j+M*(pp-1),i] <- a_bar_1/(pp^2) ######
-          V_i[j+M*(pp-1),i] <- (a_bar_1/pp)^2
+          V_i[j+M*(pp-1),i] <- (a_bar_1/pp^2) ### variance on own lags
         }else{
-          #V_i[j+M*(pp-1),i] <- (a_bar_2 * sigma_sq[i])/(pp^2*sigma_sq[j]) #####
-          V_i[j+M*(pp-1),i] <- (a_bar_2/pp)^2 * (sigma_sq[i]/sigma_sq[j])
+          V_i[j+M*(pp-1),i] <- (a_bar_2/pp)^2 * (sigma_sq[i]/sigma_sq[j]) # variance on other lags
         }
       }
     }
@@ -130,3 +128,61 @@
   }
   return(V_i)
 }
+
+#' @name .get_V
+#' @noRd
+.get_V2 <- function(M=M,p=p,Ki1=Ki1,a_bar_1,a_bar_2,a_bar_3,a_bar_4,sigma_sq,sigma_co,cons=FALSE,trend=FALSE){
+  V_it <- array(0, c(M*p,M,Ki1))
+  Z_i  <- array(0, c(M,M,Ki1))
+  if(cons)  C_it <- array(0, c(1,M,Ki1))
+  if(trend) T_it <- array(0, c(1,M,Ki1))
+  for(kk in 1:Ki1){
+    # endogenous part
+    for(i in 1:M){ # for each equation i
+      for(pp in 1:p){ # for each lag pp
+        for(j in 1:M){ # for each variable j
+          if(i==j){
+            V_it[j+M*(pp-1),i,kk] <- (a_bar_1/pp^2) ### variance on own lags
+          }else{
+            V_it[j+M*(pp-1),i,kk] <- (a_bar_2/pp)^2 * (sigma_sq[i]/sigma_sq[j]) # variance on other lags
+          }
+        }
+      }
+    }
+    # constant
+    if(cons){
+      for(i in 1:M){
+        C_it[1,i,kk] <- a_bar_3 * sigma_sq[i]
+      }
+    }
+    # trend
+    if(trend){
+      for(i in 1:M){
+        T_it[1,i,kk] <- a_bar_3 * sigma_sq[i]
+      }
+    }
+    # zeta
+    for(mm in 2:M){
+      for(mmm in 1:(mm-1)){
+        Z_i[mm,mmm,kk] <- a_bar_4^2 * sigma_sq[i] #(sigma_sq[i]/sigma_co[mm])
+      }
+    }
+  }
+  V_i <- lapply(seq(1,Ki1), function(x) V_it[,,x])
+  V_i <- Reduce(rbind,V_i)
+  if(cons) {
+    C_i <- lapply(seq(1,Ki1), function(x) C_it[,,x])
+    C_i <- Reduce(rbind,C_i)
+  } else C_i <- NULL
+  if(trend) {
+    T_i <- lapply(seq(1,Ki1), function(x) T_it[,,x])
+    T_i <- Reduce(rbind,T_i)
+  } else T_i <- NULL
+
+  V_i <- rbind(V_i,C_i,T_i)
+  rownames(V_i) <- colnames(V_i) <- NULL
+
+  return(list(theta=V_i,zeta=Z_i))
+}
+
+

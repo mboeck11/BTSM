@@ -3,6 +3,7 @@
 
 #' @name BVAR_linear
 #' @noRd
+#' @export
 BVAR_linear <- function(Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in) {
     .Call(`_BTSM_BVAR_linear`, Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in)
 }
@@ -20,10 +21,11 @@ dmvnrm_arma_fast <- function(x, mean, sigma, logd = FALSE) {
     .Call(`_BTSM_dmvnrm_arma_fast`, x, mean, sigma, logd)
 }
 
-#' @name globalLik
+#' @name loglik_C
 #' @noRd
-globalLik <- function(Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in) {
-    .Call(`_BTSM_globalLik`, Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in)
+#' @export
+loglik_C <- function(Y_in, X_in, A_in, S_in, thindraws_in) {
+    .Call(`_BTSM_loglik_C`, Y_in, X_in, A_in, S_in, thindraws_in)
 }
 
 #' @name sample_McCausland

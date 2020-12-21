@@ -9,10 +9,14 @@
     default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   }
   if(!is.na(prior_in)){
-    invisible(capture.output(
-      bvar<-BVAR_linear(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
-      ,type="message"))
-    if(is(bvar,"try-error")){
+    if(!default_hyperpara$use_R){
+      invisible(capture.output(
+        bvar<-BVAR_linear(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
+        ,type="message"))
+      if(is(bvar,"try-error")){
+        bvar<-.BVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
+      }
+    }else{
       bvar<-.BVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
     }
   }else if(prior=="NC"){
@@ -85,7 +89,7 @@
   res_store     <- bvar$res_store; dimnames(res_store) <- list(NULL,NULL,colnames(Y))
   # MN
   if(prior=="MN"){
-    shrink_store  <- bvar$shrink_store; dimnames(shrink_store) <- list(NULL,c("shrink1","shrink2","shrink4"))
+    shrink_store  <- bvar$shrink_store; dimnames(shrink_store) <- list(NULL,c("shrink1","shrink2"))
     shrink_post   <- apply(shrink_store,2,median)
   }else{
     shrink_store  <- shrink_post <- NULL
@@ -197,7 +201,6 @@
   shrink1   <- hyperpara$shrink1
   shrink2   <- hyperpara$shrink2
   shrink3   <- hyperpara$shrink3
-  shrink4   <- hyperpara$shrink4
   # prior == 2: SSVS
   tau00     <- hyperpara$tau0
   tau11     <- hyperpara$tau1
@@ -241,12 +244,8 @@
   theta <- matrix(10,k,M)
 
   # MN stuff
-  accept1 <- 0
-  accept2 <- 0
-  accept4 <- 0
-  scale1  <- .43
-  scale2  <- .43
-  scale4  <- .43
+  accept1 <- accept2 <- 0
+  scale1  <- scale2 <- .43
   sigma_sq  <- matrix(0,M,1) #vector which stores the residual variance
   for (i in 1:M){
     Ylag_i         <- .mlag(Yraw[,i],p)
@@ -258,7 +257,7 @@
   }
   if(prior==1){
     theta <- .get_V(k=k,M=M,p=p,a_bar_1=shrink1,a_bar_2=shrink2,a_bar_3=shrink3,
-                    a_bar_4=shrink4,sigma_sq=sigma_sq,trend=trend)
+                    sigma_sq=sigma_sq,cons=cons,trend=trend)
   }
 
   # SSVS stuff
@@ -334,7 +333,7 @@
   Sv_store     <- array(NA,c(thindraws,bigT,M))
   pars_store   <- array(NA,c(thindraws,4,M))
   # MN
-  shrink_store <- array(NA,c(thindraws,3))
+  shrink_store <- array(NA,c(thindraws,2))
   # SSVS
   gamma_store  <- array(NA,c(thindraws,k,M))
   omega_store  <- array(NA,c(thindraws,M,M))
@@ -413,28 +412,11 @@
         accept2 <- accept2+1
       }
 
-      #Step for the final shrinkage parameter (weakly exogenous)
-      shrink4.prop <- exp(rnorm(1,0,scale4))*shrink4
-      if(shrink4.prop<1e-17) shrink4.prop <- 1e-17
-      if(shrink4.prop>1e+17) shrink4.prop <- 1e+17
-      theta4.prop   <- .get_V(k=k,M=M,p=p,a_bar_1=shrink1,a_bar_2=shrink2,a_bar_3=shrink3,a_bar_4=shrink4.prop,sigma_sq=sigma_sq)
-      post4.prop <- sum(dnorm(as.vector(A_draw),as.vector(A_prior),sqrt(as.vector(theta4.prop)),log=TRUE))+dgamma(shrink4.prop,0.01,0.01,log=TRUE)
-      post4.prop <- post4.prop + log(shrink4.prop)
-      post4 <- sum(dnorm(as.vector(A_draw),as.vector(A_prior),sqrt(as.vector(theta)),log=TRUE))+dgamma(shrink4,0.01,0.01,log=TRUE)
-      post4 <- post4 + log(shrink4)
-      if ((post4.prop-post4)>log(runif(1,0,1))){
-        shrink4  <- shrink4.prop
-        theta    <- theta4.prop
-        accept4  <- accept4+1
-      }
-
       if (irep<(0.5*nburn)){
         if ((accept1/irep)<0.15) scale1 <- 0.99*scale1
         if ((accept1/irep)>0.3)  scale1 <- 1.01*scale1
         if ((accept2/irep)<0.15) scale2 <- 0.99*scale2
         if ((accept2/irep)>0.3)  scale2 <- 1.01*scale2
-        if ((accept4/irep)<0.15) scale4 <- 0.99*scale4
-        if ((accept4/irep)>0.3)  scale4 <- 1.01*scale4
       }
     }
     # SSVS
@@ -579,7 +561,7 @@
       Sv_store[count,,] <- Sv_draw
       pars_store[count,,] <- pars_var
       # MN
-      shrink_store[count,] <- c(shrink1,shrink2,shrink4)
+      shrink_store[count,] <- c(shrink1,shrink2)
       # SSVS
       gamma_store[count,,] <- gamma
       omega_store[count,,] <- omega

@@ -54,9 +54,9 @@ BEGIN_RCPP
     return rcpp_result_gen;
 END_RCPP
 }
-// globalLik
-List globalLik(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const arma::cube Ginv_in, const SEXP thindraws_in);
-RcppExport SEXP _BTSM_globalLik(SEXP Y_inSEXP, SEXP X_inSEXP, SEXP A_inSEXP, SEXP S_inSEXP, SEXP Ginv_inSEXP, SEXP thindraws_inSEXP) {
+// loglik_C
+List loglik_C(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const SEXP thindraws_in);
+RcppExport SEXP _BTSM_loglik_C(SEXP Y_inSEXP, SEXP X_inSEXP, SEXP A_inSEXP, SEXP S_inSEXP, SEXP thindraws_inSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -64,9 +64,8 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< const SEXP >::type X_in(X_inSEXP);
     Rcpp::traits::input_parameter< const arma::cube >::type A_in(A_inSEXP);
     Rcpp::traits::input_parameter< const arma::cube >::type S_in(S_inSEXP);
-    Rcpp::traits::input_parameter< const arma::cube >::type Ginv_in(Ginv_inSEXP);
     Rcpp::traits::input_parameter< const SEXP >::type thindraws_in(thindraws_inSEXP);
-    rcpp_result_gen = Rcpp::wrap(globalLik(Y_in, X_in, A_in, S_in, Ginv_in, thindraws_in));
+    rcpp_result_gen = Rcpp::wrap(loglik_C(Y_in, X_in, A_in, S_in, thindraws_in));
     return rcpp_result_gen;
 END_RCPP
 }
@@ -106,7 +105,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"_BTSM_BVAR_linear", (DL_FUNC) &_BTSM_BVAR_linear, 11},
     {"_BTSM_do_rgig1", (DL_FUNC) &_BTSM_do_rgig1, 3},
     {"_BTSM_dmvnrm_arma_fast", (DL_FUNC) &_BTSM_dmvnrm_arma_fast, 4},
-    {"_BTSM_globalLik", (DL_FUNC) &_BTSM_globalLik, 6},
+    {"_BTSM_loglik_C", (DL_FUNC) &_BTSM_loglik_C, 5},
     {"_BTSM_sample_McCausland", (DL_FUNC) &_BTSM_sample_McCausland, 2},
     {"_BTSM_MH_step", (DL_FUNC) &_BTSM_MH_step, 9},
     {NULL, NULL, 0}

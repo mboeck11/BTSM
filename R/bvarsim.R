@@ -84,7 +84,7 @@ bvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE){
 
   nhor    <- 60
   impresp <- array(0, c(M, M, nhor))
-  impresp[,,1]  <- t(shock)
+  impresp[,,1]  <- shock
   compMati <- Cm
   for(j in 2:nhor) {
     temp <- t(Jm) %*% compMati %*% Jm %*% shock

@@ -127,11 +127,12 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   default_hyperpara <- list(c=10, Multiplier=10, # hyperparameter setup for natural conjugate case
                             a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
-                            shrink1=0.1,shrink2=0.2,shrink3=10^2,shrink4=0.1, # MN
+                            shrink1=0.1,shrink2=0.2,shrink3=10^2, # MN
                             tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS
-                            e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE) # NG
+                            e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE,
+                            use_R=FALSE) # NG
   paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
-                 "shrink4","tau0","tau1","kappa0","kappa1","p_i","q_ij","e_lambda","d_lambda","a_log","a_start","sample_A")
+                 "tau0","tau1","kappa0","kappa1","p_i","q_ij","e_lambda","d_lambda","a_log","a_start","sample_A","use_R")
   if(is.null(hyperpara)){
     if(verbose) cat("\t No hyperparameters are chosen, default setting applied.\n")
   }
@@ -170,7 +171,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   if(is.null(cores)) {cores <- 1}
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
-  globalpost <- .BVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
+  globalpost <- .BVAR_linear_wrapper(Yraw=xglobal,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
   #--------------------------- checking eigenvalues ----------------------------------------------------------#
   if(is.logical(eigen)){
     if(eigen){trim<-1.00}else{trim<-NULL}
@@ -210,6 +211,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
     globalpost$store <- store
     globalpost$post$A.eigen <- unlist(A.eigen)
     args$thindraws <- length(trim_eigen)
+    if(verbose) cat(paste0("\nModel yields ", args$thindraws," stable draws."))
   }
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
@@ -219,7 +221,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   end.bvar <- Sys.time()
   diff.bvar <- difftime(end.bvar,start.bvar,units="mins")
   mins.bvar <- round(diff.bvar,0); secs.bvar <- round((diff.bvar-floor(diff.bvar))*60,0)
-  if(verbose) cat(paste("\n Needed time for estimation of bvar: ",mins.bvar," ",ifelse(mins.bvar==1,"min","mins")," ",secs.bvar, " ",ifelse(secs.bvar==1,"second.","seconds.\n"),sep=""))
+  if(verbose) cat(paste("\nNeeded time for estimation of bvar: ",mins.bvar," ",ifelse(mins.bvar==1,"min","mins")," ",secs.bvar, " ",ifelse(secs.bvar==1,"second.","seconds.\n"),sep=""))
   return(out)
 }
 
@@ -252,4 +254,49 @@ print.bvar<-function(x, ...){
   cat(colnames(x$args$yfull))
   cat("\n")
   invisible(x)
+}
+
+#' @name logLik
+#' @title Extract Log-likelihood of Bayesian VAR
+#' @description Extract Log-Likelihood for \code{bvar}.
+#' @param object an object of class \code{bvar}.
+#' @param ... additional arguments.
+#' @param quantile reported quantiles. Default is set to median.
+#' @return Returns an vector of dimension \code{q} (number of specified quantiles) of log-likelihoods.
+#' @importFrom stats logLik
+#' @export
+logLik.bvar<-function(object, ..., quantile=.50){
+  if(length(quantile)!=1){
+    stop("Please provide only one quantile.")
+  }
+  temp <- object$args$logLik
+  xglobal <- object$xglobal
+  bigT <- nrow(xglobal)
+  bigK <- ncol(xglobal)
+  plag <- object$args$plag
+  if(is.null(temp)){
+    cons      <- object$args$cons
+    trend     <- object$args$trend
+    thindraws <- object$args$thindraws
+    X_large   <- .mlag(xglobal,plag)
+    if(cons)  X_large <- cbind(X_large,1)
+    if(trend) X_large <- cbind(X_large,seq(1:bigT))
+    Y_large   <- xglobal[(plag+1):bigT,,drop=FALSE]
+    X_large   <- X_large[(plag+1):bigT,,drop=FALSE]
+    A_large   <- object$store$A_store
+    S_large   <- object$store$Smed_store
+    loglik <- try(loglik_C(Y_in=Y_large,X_in=X_large,A_in=A_large,S_in=S_large,thindraws=thindraws)$loglik,silent=TRUE)
+
+    if(is(loglik,"try-error")){
+      out <- -Inf
+    }else{
+      out <- quantile(loglik,quantile,na.rm=TRUE)
+    }
+    eval.parent(substitute(object$args$logLik<-out))
+  }else{
+    out <- temp
+  }
+  attributes(out) <- list(nall=bigT, nobs=bigT, df=bigK)
+  class(out) <- "logLik"
+  return(out)
 }

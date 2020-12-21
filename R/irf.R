@@ -26,16 +26,85 @@
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
 "irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
-                  quantiles=c(.05,.10,.16,.50,.84,.90,.95)){
+                  quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
+  #------------------------------ message to console -------------------------------------------------------#
+  if(verbose){
+    if(class(x)=="bvar")
+      cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
+    if(class(x)=="bvec")
+      cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
+    if(class(x)=="bivar")
+      cat("\nStart computing impulse response functions of Bayesian Interacted Vector Autoregression.\n\n")
+  }
+  #------------------------------ do checks ---------------------------------------------------------------#
+  .irf.checks(x=x, n.ahead=n.ahead, ident=ident, scal=scal, sign.constr=sign.constr, proxy=proxy)
   UseMethod("irf", x)
 }
 
 #' @export
-irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+                     quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
-  if(verbose)  cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
   if(ident=="chol-shortrun"){
-    if(verbose) {
+    if(verbose)
+      cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
+  }else if(ident=="chol-longrun"){
+    if(verbose)
+      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
+  }else if(ident=="girf"){
+    if(verbose)
+      cat("Identification scheme: Generalized impulse responses.\n")
+  }else if(ident=="sign"){
+    if(verbose)
+      cat("Identification scheme: identification via sign-restrictions.\n")
+  }else if(ident=="proxy"){
+    if(verbose)
+      cat("Identification schem: Identification via proxy variable.\n")
+  }
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
+  end.irf <- Sys.time()
+  diff.irf <- difftime(end.irf,start.irf,units="mins")
+  mins.irf <- round(diff.irf,0); secs.irf <- round((diff.irf-floor(diff.irf))*60,0)
+  cat(paste("\nNeeded time for impulse response analysis: ",mins.irf," ",ifelse(mins.irf==1,"min","mins")," ",secs.irf, " ",ifelse(secs.irf==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @export
+irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+                     quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
+  start.irf <- Sys.time()
+  if(ident=="chol-shortrun"){
+    if(verbose)
+      cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
+  }else if(ident=="chol-longrun"){
+    if(verbose)
+      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
+  }else if(ident=="girf"){
+    if(verbose)
+      cat("Identification scheme: Generalized impulse responses.\n")
+  }else if(ident=="sign"){
+    if(verbose)
+      cat("Identification scheme: identification via sign-restrictions.\n")
+  }else if(ident=="proxy"){
+    if(verbose)
+      cat("Identification schem: Identification via proxy variable.\n")
+  }
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
+  end.irf <- Sys.time()
+  diff.irf <- difftime(end.irf,start.irf,units="mins")
+  mins.irf <- round(diff.irf,0); secs.irf <- round((diff.irf-floor(diff.irf))*60,0)
+  if(verbose) cat(paste("\nNeeded time for impulse response analysis: ",mins.irf," ",ifelse(mins.irf==1,"min","mins")," ",secs.irf, " ",ifelse(secs.irf==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @export
+irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+                      eval.q=NULL){
+  start.irf <- Sys.time()
+  if(ident=="chol-shortrun"){
+    if(verbose){
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
     }
   }else if(ident=="chol-longrun"){
@@ -47,7 +116,7 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       cat("Identification scheme: Generalized impulse responses.\n")
     }
   }else if(ident=="sign"){
-    if(verbose) {
+    if(verbose){
       cat("Identification scheme: identification via sign-restrictions.\n")
     }
   }else if(ident=="proxy"){
@@ -55,7 +124,77 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       cat("Identification schem: Identification via proxy variable.\n")
     }
   }
-  out <- irf.bvar(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=FALSE)
+  #------------ get data -------------------------#
+  Y         <- x$args$Y
+  D         <- coredata(x$xint)
+  Jt        <- x$store$J_store
+  M         <- ncol(x$args$Data)
+  Ki        <- ncol(D)
+  Ki1       <- Ki+1
+  thindraws <- x$args$thindraws
+  k         <- dim(x$store$Atilde_store)[[2]]
+  plag      <- x$args$plag
+  bigT      <- nrow(x$xglobal)-plag
+  cons      <- x$args$cons
+  trend     <- x$args$trend
+  X         <- .mlag(x$args$Data,plag)
+  X         <- X[(plag+1):nrow(X),,drop=FALSE]
+  if(cons) X <- cbind(X,1)
+  if(trend) X <- cbind(X,seq(1,bigT))
+  #---------- extra checks------------------------#
+  if(length(eval.q)!=Ki)
+    stop("Please provide 'eval.q' with same length as number of columns in interaction matrix D.")
+  #------ transform to reduced-form model --------#
+  Dval <- c(1,apply(D,2,quantile,eval.q))
+
+  # old stuff
+  a0tilde_store   <- x$store$a0tilde_store
+  a1tilde_store   <- x$store$a1tilde_store
+  Phitilde_store  <- x$store$Phitilde_store
+  volatilde_store <- x$store$volatilde_store
+
+  # new stuff
+  A_store    <- array(NA, c(thindraws,M*plag+cons+trend,M))
+  S_store    <- array(NA, c(thindraws,bigT,M,M))
+  res_store  <- array(NA, c(thindraws,bigT,M))
+
+  # loop over draws
+  for(irep in 1:thindraws){
+    J <- diag(M)
+    for(mm in 2:M){
+      for(jj in 1:(mm-1)){
+        for(kk in 1:Ki1) J[mm,jj] <- J[mm,jj]+Jt[irep,mm,jj,kk]*Dval[kk]
+      }
+    }
+    Jinv <- solve(J)
+    a0 <- a1 <- matrix(0,1,M)
+    Phi <- matrix(0,M*plag,M)
+    S <- array(NA,c(bigT,M,M))
+    if(cons)
+      for(kk in 1:Ki1) a0 <- a0+a0tilde_store[irep,kk,]*Dval[kk] else a0 <- NULL
+    if(trend)
+      for(kk in 1:Ki1) a1 <- a1+a1tilde_store[irep,kk,]*Dval[kk] else a1 <- NULL
+    for(pp in 1:plag){
+      for(kk in 1:Ki1) Phi[((pp-1)*M+1):(pp*M),] <- Phi[((pp-1)*M+1):(pp*M),] + Phitilde_store[[pp]][irep,,,kk]*Dval[kk]
+    }
+    # multiply with Jinv
+    if(cons) a0 <- t(Jinv%*%t(a0))
+    if(trend) a1 <- t(Jinv%*%t(a1))
+    Phi <- t(Jinv%*%t(Phi))
+    for(tt in 1:bigT){
+      S[tt,,] <- Jinv%*%diag(volatilde_store[irep,tt,])%*%t(Jinv)
+    }
+    A_store[irep,,]   <- rbind(Phi,a0,a1)
+    S_store[irep,,,]  <- S
+    res_store[irep,,] <- Y - X%*%A_store[irep,,]
+  }
+
+  x$store$A_store    <- A_store
+  x$store$S_store    <- S_store
+  x$store$Smed_store <- apply(S_store,c(1,3,4),median)
+  x$store$res_store  <- res_store
+
+  out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
   if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -64,14 +203,13 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
   return(out)
 }
 
-#' @export
+#' @name .irf.generator
+#' @noRd
 #' @importFrom stats median
 #' @importFrom stringr str_pad
 #' @importFrom utils object.size
-irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
-                     quantiles=c(.05,.10,.16,.50,.84,.90,.95)){
-  start.irf <- Sys.time()
-  if(verbose) cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
+.irf.generator <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,
+                     quantiles=c(.05,.10,.16,.50,.84,.90,.95), verbose=TRUE){
   #------------------------------ get stuff -------------------------------------------------------#
   plag        <- x$args$plag
   xglobal     <- x$args$Data
@@ -85,16 +223,8 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
   xdat        <- xglobal[(plag+1):Traw,,drop=FALSE]
   thindraws   <- x$args$thindraws
   varNames    <- colnames(xglobal)
-  #------------------------------ user checks  ---------------------------------------------------#
-  # checks general
-  if(is.null(ident)){
-    stop("Please provide preferred identification scheme.")
-  }
-  # checks identification via sign restrictions
-  if(!is.null(sign.constr)){
-    if(ident!="sign"){
-      stop("Please select 'sign' as identification scheme when providing a list of sign restrictions.")
-    }
+  #------------------------------ assign irf function  ---------------------------------------------------#
+  if(ident=="sign"){
     # check MaxTries, if no MaxTries, set it to 7500
     MaxTries <- 7500
     if(!is.null(sign.constr$MaxTries)){
@@ -102,30 +232,6 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
       sign.constr$MaxTries <- NULL
     }
     shock.nr<-length(sign.constr)
-    # check whether sign restriction list is correctly specified, for each shock have to specify
-    tt<-all(sapply(lapply(sign.constr,names),function(x) all(c("shock","sign","restrictions")%in%x)))
-    if(!tt){
-      stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
-    }
-    # check scaling, if no scaling, set it to 1
-    if(is.null(scal)) scal <- 1
-    if(length(scal)!=bigK) scal <- rep(scal,bigK)
-    type <- sign.constr$type
-    if(is.null(type)) type <- "short-run"
-    # check signs horizons
-    hh<-unlist(lapply(sign.constr,function(l)l$rest.horz))
-    if(any(hh==0)){
-      stop("Please provide contemporanous signs as horizon==1.")
-    }
-    if(any(hh>n.ahead)){
-      stop("Do not restrict anything after the impulse response horizon given by 'n.ahead'.")
-    }
-  }
-  #------------------------------ assign irf function  ---------------------------------------------------#
-  if(ident=="sign"){
-    if(verbose) {
-      cat("Identification scheme: identification via sign-restrictions.\n")
-    }
     irf<-.irf.sign.zero
     # first check whether all elements of sign restriction list have been specified
     res_len<-unlist(lapply(sign.constr, function(l){
@@ -256,53 +362,29 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
     }
     strg.list <- NULL
   }else if(ident=="chol-shortrun"){
-    if(verbose) {
-      cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
-    }
     irf <- .irf.chol
     type <- "short-run"
     if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="girf"){
-    if(verbose){
-      cat("Identification scheme: Generalized impulse responses.\n")
-    }
     irf <- .irf.girf
     if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="chol-longrun"){
-    if(verbose){
-      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
-    }
     irf <- .irf.chol
     type <- "long-run"
     if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
   }else if(ident=="proxy"){
-    if(verbose){
-      cat("Identification schem: Identification via proxy variable.\n")
-    }
     irf <- .irf.proxy
     if(is.null(scal)) scal <- 1
     if(length(scal)==1) scal <- rep(scal,bigK)
     MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-type<-NULL
     if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
-    if(nrow(proxy)!=bigT){
-      stop("Provide 'proxy' with same length as dataset.")
-    }
   }
-
-  # initialize objects to save IRFs, HDs, etc.
-  R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
-  IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
-  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,bigQ))
-  dimnames(imp_posterior)[[1]] <- 1:n.ahead
-  dimnames(imp_posterior)[[2]] <- colnames(xglobal)
-  dimnames(imp_posterior)[[3]] <- paste("shock",colnames(xglobal),sep="_")
-  dimnames(imp_posterior)[[4]] <- paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {
@@ -319,6 +401,15 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
     }
   }
   if(is.null(cores)) {cores <- 1}
+  #--------------------------------------------------------------------------------------------------------#
+  # initialize objects to save IRFs, HDs, etc.
+  R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
+  IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
+  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,bigQ))
+  dimnames(imp_posterior)[[1]] <- 1:n.ahead
+  dimnames(imp_posterior)[[2]] <- colnames(xglobal)
+  dimnames(imp_posterior)[[3]] <- paste("shock",colnames(xglobal),sep="_")
+  dimnames(imp_posterior)[[4]] <- paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")
   #------------------------------ start computing irfs  ---------------------------------------------------#
   start.comp <- Sys.time()
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
@@ -368,11 +459,11 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
   }
   # Normalization
   if(thindraws>0){
-      for(z in 1:bigK){
-        Mean<-IRF_store[,1,z,z]
-        for(irep in 1:thindraws){
-          IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scal[z]
-        }
+    for(z in 1:bigK){
+      Mean<-IRF_store[,1,z,z]
+      for(irep in 1:thindraws){
+        IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scal[z]
+      }
     }
     for(i in 1:bigK){
       for(q in 1:bigQ){
@@ -406,10 +497,45 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
   if(save.store){
     out$IRF_store = IRF_store
   }
-  if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
-  end.irf <- Sys.time()
-  diff.irf <- difftime(end.irf,start.irf,units="mins")
-  mins.irf <- round(diff.irf,0); secs.irf <- round((diff.irf-floor(diff.irf))*60,0)
-  if(verbose) cat(paste("\nNeeded time for impulse response analysis: ",mins.irf," ",ifelse(mins.irf==1,"min","mins")," ",secs.irf, " ",ifelse(secs.irf==1,"second.","seconds.\n"),sep=""))
   return(out)
 }
+
+#' @name .irf.checks
+#' @noRd
+.irf.checks <- function(x, n.ahead, ident, scal, sign.constr, proxy){
+  # checks general
+  if(is.null(ident)){
+    stop("Please provide preferred identification scheme.")
+  }
+  # checks identification via sign restrictions
+  if(!is.null(sign.constr)){
+    if(ident!="sign"){
+      stop("Please select 'sign' as identification scheme when providing a list of sign restrictions.")
+    }
+    # check whether sign restriction list is correctly specified, for each shock have to specify
+    tt<-all(sapply(lapply(sign.constr,names),function(x) all(c("shock","sign","restrictions")%in%x)))
+    if(!tt){
+      stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
+    }
+    # check scaling, if no scaling, set it to 1
+    if(is.null(scal)) scal <- 1
+    if(length(scal)!=bigK) scal <- rep(scal,bigK)
+    type <- sign.constr$type
+    if(is.null(type)) type <- "short-run"
+    # check signs horizons
+    hh<-unlist(lapply(sign.constr,function(l)l$rest.horz))
+    if(any(hh==0)){
+      stop("Please provide contemporanous signs as horizon==1.")
+    }
+    if(any(hh>n.ahead)){
+      stop("Do not restrict anything after the impulse response horizon given by 'n.ahead'.")
+    }
+  }
+  # checks for proxy
+  if(ident=="proxy"){
+    if(nrow(proxy)!=nrow(x$xglobal)){
+      stop("Provide 'proxy' with same length as dataset.")
+    }
+  }
+}
+

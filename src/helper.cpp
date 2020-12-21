@@ -55,7 +55,7 @@ double get_ar(mat& Yraw, int p){
   return s_OLS;
 }
 
-void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, double shrink4, bool cons, int p, bool trend){
+void get_Vminnesota(mat& V, vec& sigmas, double shrink1, double shrink2, double shrink3, bool cons, int p, bool trend){
   int k = V.n_rows; int M = V.n_cols;
 
   // endogenous part
@@ -166,10 +166,11 @@ arma::vec dmvnrm_arma_old(arma::mat& x,
   return exp(out);
 }
 
-//' @name globalLik
+//' @name loglik_C
 //' @noRd
+//' @export
 //[[Rcpp::export]]
-List globalLik(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const arma::cube Ginv_in, const SEXP thindraws_in) {
+List loglik_C(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const SEXP thindraws_in) {
   //----------------------------------------------------------------------------------------------------------------------
   // GET INPUTS
   //----------------------------------------------------------------------------------------------------------------------
@@ -180,18 +181,16 @@ List globalLik(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const ar
   mat X(Xr.begin(), bigT, bigKK, false);
 
   const int thindraws  = as<int>(thindraws_in);
-  vec globalLik(thindraws, fill::zeros);
+  vec loglikvec(thindraws, fill::zeros);
   //----------------------------------------------------------------------------------------------------------------------
   // Evaluate density
   //----------------------------------------------------------------------------------------------------------------------
   for(int irep = 0; irep < thindraws; irep++){
     mat A       = A_in.row(irep);
-    mat S       = S_in.row(irep);
-    mat Ginv    = Ginv_in.row(irep);
-    mat Sig     = Ginv*S*Ginv.t();
-    mat mean    = X*A.t();
+    mat Sig     = S_in.row(irep);
+    mat mean    = X*A;
     vec logLik  = dmvnrm_arma_fast(Y, mean, Sig, true);
-    globalLik.row(irep) = sum(logLik);
+    loglikvec(irep) = sum(logLik);
   }
-  return List::create(Named("globalLik")=globalLik);
+  return List::create(Named("loglik")=loglikvec);
 }
