@@ -20,6 +20,18 @@ Note that Mac OS needs gfortran binary packages to be installed. See also: https
 
 ## Usage
 
+This package focuses on multivariate time series models estimated in a Bayesian fashion.
+
+| Model   | Estimation  | IRFs | Predictions | FEVD | HD  |
+|---------|-------------|------|-------------|------|-----|
+| BVAR    | `bvar()`    | yes  | yes         | yes  | yes |
+| BVEC    | `bvec()`    | yes  | no          | no   | no  |
+| BIVAR   | `bivar()`   | yes  | no          | no   | no  |
+| BPVAR   | `bpvar()`   | no   | no          | no   | no  |
+| BIPVAR  | no          | no   | no          | no   | no  |
+| TVPBVAR | `tvpbvar()` | no   | no          | no   | no  |
+|---------------------------------------------------------|
+
 ## References
 
 Huber, F. and M. Feldkircher (2016) Adaptive Shrinkage in Bayesian Vector Autoregressive Models. *Journal of Business and Economic Statistics*, Vol. 37(1), pp. 27-39.
