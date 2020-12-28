@@ -26,13 +26,14 @@
 #' @importFrom parallel parLapply mclapply
 #' @importFrom Rcpp evalCpp
 #' @importFrom stats is.ts median time ts
+#' @importFrom stringr str_extract
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
 bpvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.bvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
-  if(!is.matrix(Data)){
-    stop("Please provide the argument 'Data' either as 'matrix' object.")
+  if(!is.matrix(Data) && !is.list(Data)){
+    stop("Please provide the argument 'Data' either as 'matrix' or as 'list' object.")
   }
   if(!is.null(Ex)){
     if(!is.list(Ex) & !is.matrix(Ex)){
@@ -68,44 +69,91 @@ bpvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1
   #------------------------------ user checks  ---------------------------------------------------#
   # check Data
   if(is.matrix(Data)){
-    if(any(is.na(Data))){
+    cN    <- unique(str_extract(colnames(Data), "^[a-z]{2}(?=\\.)"))
+    Data <- lapply(cN, function(cc){
+      data<-Data[,grepl(cc, colnames(Data))]
+      colnames(data) <- gsub(paste0(cc,"\\."),"",colnames(data))
+      return(data)
+      })
+    names(Data) <- cN
+  }
+  if(is.list(Data)){
+    if(all(unlist(lapply(Data,function(l)any(is.na(l)))))){
       stop("The data you have submitted contains NAs. Please check the data.")
     }
-    isTS  <- is.ts(Data)
-    isXTS <- is.xts(Data)
-    Traw  <- nrow(Data)
-    if(isTS || isXTS){
-      temp       <- as.character(time(Data))
-      years      <- unique(regmatches(temp,regexpr("^[0-9]{4}",temp)))
-      months     <- temp
-      for(kk in 1:length(years)) months <- gsub(paste(years[kk],"(\\.)?",sep=""),"",months)
-      freq       <- length(unique(months))
-      months     <- strtrim(months,3)
-      startmonth <- ifelse(months[1]=="","01",ifelse(months[1]=="083","02",ifelse(months[1]=="166","03",ifelse(months[1]=="25","04",
-                                                                                                               ifelse(months[1]=="333","05",ifelse(months[1]=="416","06",ifelse(months[1]=="5","07",ifelse(months[1]=="583","08",
-                                                                                                                                                                                                           ifelse(months[1]=="666","09",ifelse(months[1]=="75","10",ifelse(months[1]=="833","11","12")))))))))))
-      timeindex  <- seq.Date(from=as.Date(paste(years[1],"-",startmonth,"-01",sep=""), format="%Y-%m-%d"),
-                             by=ifelse(freq==12,"months","quarter"), length.out = Traw)
-      Data       <- ts(coredata(Data), start=c(as.numeric(years[1]),as.numeric(startmonth)),frequency=freq)
-    }else{
-      timeindex  <- seq.Date(from=as.Date("1830-08-01", format="%Y-%m-%d"), by="month", length.out = Traw)
-      temp       <- coredata(Data)
-      Data       <- ts(temp, start=c(1830,8), frequency=12)
+    if(!all(apply(sapply(Data,colnames),1,function(x)length(unique(x))==1))){
+      stop("Please provide same variables in the same order for each country.")
     }
-    args$time <- timeindex
-    args$Traw <- length(timeindex)
+    cN    <- names(Data)
+    Data  <- lapply(Data, function(data){
+      isTS  <- is.ts(data)
+      isXTS <- is.xts(data)
+      Traw  <- nrow(data)
+      if(isTS || isXTS){
+        temp       <- as.character(time(data))
+        years      <- unique(regmatches(temp,regexpr("^[0-9]{4}",temp)))
+        months     <- temp
+        for(kk in 1:length(years)) months <- gsub(paste(years[kk],"(\\.)?",sep=""),"",months)
+        freq       <- length(unique(months))
+        months     <- strtrim(months,3)
+        startmonth <- ifelse(months[1]=="","01",ifelse(months[1]=="083","02",ifelse(months[1]=="166","03",ifelse(months[1]=="25","04",
+                                                                                                                 ifelse(months[1]=="333","05",ifelse(months[1]=="416","06",ifelse(months[1]=="5","07",ifelse(months[1]=="583","08",
+                                                                                                                                                                                                             ifelse(months[1]=="666","09",ifelse(months[1]=="75","10",ifelse(months[1]=="833","11","12")))))))))))
+        timeindex  <- seq.Date(from=as.Date(paste(years[1],"-",startmonth,"-01",sep=""), format="%Y-%m-%d"),
+                               by=ifelse(freq==12,"months","quarter"), length.out = Traw)
+        data       <- ts(coredata(data), start=c(as.numeric(years[1]),as.numeric(startmonth)),frequency=freq)
+      }else{
+        timeindex  <- seq.Date(from=as.Date("1830-08-01", format="%Y-%m-%d"), by="month", length.out = Traw)
+        data       <- ts(coredata(data), start=c(1830,8), frequency=12)
+      }
+      return(data)
+    })
+    args$time <- lapply(Data,function(l)time(l))
+    args$Traw <- lapply(args$time,function(l)length(l))
   }
   args$Data <- Data
   # check truly exogenous variables
   if(!is.null(Ex)){
     if(is.matrix(Ex)){
-      if(any(is.na(Ex))){
-        stop("The data for exogenous variables you have submitted contains NAs. Please check the data.")
+      Ex <- lapply(cN, function(cc) Ex)
+      names(Ex) <- cN
+    }
+    if(is.list(Ex)){
+      if(all(unlist(lapply(Ex,function(l)any(is.na(l)))))){
+        stop("The data you have submitted contains NAs. Please check the data.")
       }
-      if(nrow(Ex)!=args$Traw){
-        stop("Provided data and truly exogenous data not equally long. Please check.")
+      if(!all(apply(sapply(Ex,colnames),1,function(x)length(unique(x))==1))){
+        stop("Please provide same variables in the same order for each country.")
+      }
+      Ex  <- lapply(Ex, function(data){
+        isTS  <- is.ts(data)
+        isXTS <- is.xts(data)
+        Traw  <- nrow(data)
+        if(isTS || isXTS){
+          temp       <- as.character(time(data))
+          years      <- unique(regmatches(temp,regexpr("^[0-9]{4}",temp)))
+          months     <- temp
+          for(kk in 1:length(years)) months <- gsub(paste(years[kk],"(\\.)?",sep=""),"",months)
+          freq       <- length(unique(months))
+          months     <- strtrim(months,3)
+          startmonth <- ifelse(months[1]=="","01",ifelse(months[1]=="083","02",ifelse(months[1]=="166","03",ifelse(months[1]=="25","04",
+                                                                                                                   ifelse(months[1]=="333","05",ifelse(months[1]=="416","06",ifelse(months[1]=="5","07",ifelse(months[1]=="583","08",
+                                                                                                                                                                                                               ifelse(months[1]=="666","09",ifelse(months[1]=="75","10",ifelse(months[1]=="833","11","12")))))))))))
+          timeindex  <- seq.Date(from=as.Date(paste(years[1],"-",startmonth,"-01",sep=""), format="%Y-%m-%d"),
+                                 by=ifelse(freq==12,"months","quarter"), length.out = Traw)
+          data       <- ts(coredata(data), start=c(as.numeric(years[1]),as.numeric(startmonth)),frequency=freq)
+        }else{
+          timeindex  <- seq.Date(from=as.Date("1830-08-01", format="%Y-%m-%d"), by="month", length.out = Traw)
+          data       <- ts(coredata(data), start=c(1830,8), frequency=12)
+        }
+        return(data)
+      })
+      for(cc in 1:length(cN)){
+        idx <- which(time(Ex[[cN[cc]]])%in%time(Data[[cN[cc]]]))
+        Ex[[cN[cc]]] <- Ex[[cN[cc]]][idx,,drop=FALSE]
       }
     }
+    args$Ex <- Ex
   }
   # check thinning factor
   if(thin<1){
@@ -124,11 +172,9 @@ bpvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1
   args$thindraws <- draws/thin
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
-  default_hyperpara <- list(c=10, Multiplier=10, # hyperparameter setup for natural conjugate case
-                            a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
+  default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
-                            shrink1=0.1,shrink2=0.2,shrink3=10^2, # MN
-                            tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS
+                            shrink1=0.1,shrink2=0.5,shrink3=1, shrink4=10^2,s0=0.01,v0=0.01,# MN
                             e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE,
                             use_R=FALSE) # NG
   paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
@@ -148,11 +194,11 @@ bpvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1
     if(verbose) cat("Default values for chosen hyperparamters overwritten.\n")
   }
   #----------------------------------transform to matirx--------------------------------------------------------#
-  Yraw <- as.matrix(Data)
+  Yraw <- lapply(Data,function(data)as.matrix(coredata(data)))
   #---------------------------------hold out sample------------------------------------------------------------#
   args$yfull <- Yraw
-  xglobal    <- Yraw[1:(nrow(Yraw)-h),,drop=FALSE]
-  args$time  <- args$time[1:(length(args$time)-h)]
+  xglobal    <- lapply(Yraw,function(yraw) yraw[1:(nrow(yraw)-h),,drop=FALSE])
+  args$time  <- args$timeindex[1:(length(args$timeindex)-h)]
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {

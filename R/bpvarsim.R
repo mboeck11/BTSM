@@ -41,9 +41,9 @@ bpvar.sim <- function(len, M=3, N=5, plag=1, cons=FALSE, trend=FALSE, SV=FALSE, 
     }
   }
 
-  par(mfrow=c(1,1))
-  ts.plot(vol_true, col = palette()[1:(M*N)])
-  ts.plot(shock, col = palette()[1:(M*N)])
+  # par(mfrow=c(1,1))
+  # ts.plot(vol_true, col = palette()[1:(M*N)])
+  # ts.plot(shock, col = palette()[1:(M*N)])
 
   Yraw <- matrix(0,len+plag,M*N)
   if(ex) Wraw <- matrix(rnorm(2*(len+plag)),len+plag,2) else Wraw <- NULL
@@ -86,12 +86,8 @@ bpvar.sim <- function(len, M=3, N=5, plag=1, cons=FALSE, trend=FALSE, SV=FALSE, 
 
   Yraw <- Yraw[(plag+1):nrow(Yraw),,drop=FALSE]
   if(ex) Wraw <- Wraw[(plag+1):nrow(Wraw),,drop=FALSE]
-
-  # par(mfrow=c(1,1))
-  # ts.plot(Yraw, col = palette()[1:M])
-  #
-  # colnames(Yraw) <- paste0(rep(cN,each=M),".",c("y","inf","stir"))
-  # if(ex) colnames(Wraw) <- c("oilprice","comprice")
+  colnames(Yraw) <- paste0(rep(cN,each=M),".",c("y","inf","stir"))
+  if(ex) colnames(Wraw) <- c("oilprice","comprice")
 
   # MEAN BETA
   A_draw_mean <- apply(A, c(1,2), mean)

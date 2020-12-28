@@ -8,6 +8,7 @@
   if(!is.null(default_hyperpara[["a_log"]])){
     default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   }
+  nr <- 1
   Y_in=Yraw
   p_in=plag
   draws_in=draws
@@ -19,18 +20,19 @@
   prior_in=prior_in
   hyperparam_in=default_hyperpara
   Ex_in=Ex
-
-
   if(prior=="TVP" || prior=="TVP-NG"){
     prior_in <- ifelse(prior=="TVP",1,2)
     post_draws <- applyfun(1:ncol(Yraw), function(nr){
-      .TVPBVAR_linear_R.m(nr=nr,Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
+      .TVPBVAR_noncentered_R(nr=nr,Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
     })
   }else if(prior=="TTVP"){
-
+    prior_in <- 3
+    post_draws <- applyfun(1:ncol(Yraw), function(nr){
+      .TVPBVAR_centered_R(nr=nr,Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
+    })
   }
 
-  tvpbvar<-.TVPBVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
+  #tvpbvar<-.TVPBVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   #------------------------------------------------ get data ----------------------------------------#
   Y <- tvpbvar$Y; colnames(Y) <- colnames(Yraw); X <- tvpbvar$X
   M <- ncol(Y); bigT <- nrow(Y); K <- ncol(X)
@@ -59,7 +61,7 @@
     Phistore[[jj]]  <- A_store[,,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
   }
   S_store <- array(NA, c(draws/thin,bigT,M,M)); dimnames(S_store) <- list(NULL,NULL,colnames(Y),colnames(Y))
-  if(prior%in%c("NG")){
+  if(prior%in%c("TVP-NG")){
     L_store <- tvpbvar$L_store
     for(irep in 1:(draws/thin)){
       for(tt in 1:bigT){
@@ -83,7 +85,7 @@
   }
   res_store       <- tvpbvar$res_store; dimnames(res_store) <- list(NULL,NULL,colnames(Y))
   # NG
-  if(prior=="NG"){
+  if(prior=="TVP-NG"){
     tau2_store    <- tvpbvar$tau2_store
     xi2_store     <- tvpbvar$xi2_store
     lambda2_store <- tvpbvar$lambda2_store
@@ -119,14 +121,14 @@
   return(list(Y=Y,X=X,store=store,post=post))
 }
 
-#' @name .TVPBVAR_linear_R.m
+#' @name .TVPBVAR_noncentered_R.m
 #' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
 #' @importFrom MASS ginv mvrnorm
 #' @importFrom matrixcalc hadamard.prod
 #' @importFrom methods is
 #' @importFrom stats rnorm rgamma runif dnorm
 #' @noRd
-.TVPBVAR_linear_R.m <- function(nr,Y_in,p_in,draws_in,burnin_in,cons_in,trend_in,sv_in,thin_in,quiet_in,prior_in,hyperparam_in,Ex_in){
+.TVPBVAR_noncentered_R <- function(nr,Y_in,p_in,draws_in,burnin_in,cons_in,trend_in,sv_in,thin_in,quiet_in,prior_in,hyperparam_in,Ex_in){
   #----------------------------------------INPUTS----------------------------------------------------#
   Yraw  <- Y_in
   p     <- p_in
@@ -134,20 +136,25 @@
   M     <- ncol(Yraw)
   K     <- M*p
   Ylag  <- .mlag(Yraw,p)
+  names <- colnames(Yraw)
+  if(is.null(names)) names <- rep("Y",M)
+  colnames(Yraw) <- names
   nameslags <- NULL
-  for (ii in 1:p) nameslags <- c(nameslags,rep(paste("Ylag",ii,sep=""),M))
+  for(ii in 1:p) nameslags <- c(nameslags,paste0(names,".lag",ii))
   colnames(Ylag) <- nameslags
 
   texo <- FALSE; Mex <- 0; Exraw <- NULL
   if(!is.null(Ex_in)){
-    Exraw <- Ex_in; Mex <- ncol(Exraw)
-    texo <- TRUE
-    colnames(Exraw) <- rep("Tex",Mex)
+    Exraw <- Ex_in; Mex <- ncol(Exraw); texo <- TRUE
+    enames <- colnames(Exraw)
+    if(is.null(enames)) enames <- rep("Tex",Mex)
+    colnames(Exraw) <- enames
   }
 
   if(nr==1) slct <- NULL else slct <- 1:(nr-1)
 
   Xraw  <- cbind(Yraw[,slct],Ylag,Exraw)
+  colnames(Xraw) <- c(colnames(Yraw)[slct],nameslags,enames)
   X     <- Xraw[(p+1):nrow(Xraw),,drop=FALSE]
   y     <- Yraw[(p+1):Traw,nr,drop=FALSE]
   bigT  <- nrow(X)
@@ -165,7 +172,7 @@
   }
 
   d <- ncol(X)
-  n <- k*M
+  n <- d*M
   v <- (M*(M-1))/2
   #---------------------------------------------------------------------------------------------------------
   # HYPERPARAMETERS
@@ -174,17 +181,15 @@
   prior     <- prior_in
   sv        <- sv_in
   prmean    <- hyperpara$prmean
-  crit_eig  <- hyperpara$crit_eig
   # non-SV
-  a_1       <- hyperpara$a_1
-  b_1       <- hyperpara$b_1
+  c0        <- hyperpara$c0
+  g0        <- hyperpara$g0
   # SV
-  Bsigma    <- hyperpara$Bsigma
   bmu       <- hyperpara$bmu
   Bmu       <- hyperpara$Bmu
-  # TVP
   a0        <- hyperpara$a0
   b0        <- hyperpara$b0
+  Bsigma    <- hyperpara$Bsigma
   # TVP-NG
   d1        <- hyperpara$d1
   d2        <- hyperpara$d2
@@ -201,20 +206,19 @@
   #---------------------------------------------------------------------------------------------------------
   XtXinv <- try(solve(crossprod(X)),silent=TRUE)
   if(is(XtXinv,"try-error")) XtXinv <- ginv(crossprod(X))
-  A_OLS  <- XtXinv%*%(t(X)%*%Y)
-  E_OLS  <- Y - X%*%A_OLS
-  S_OLS  <- crossprod(E_OLS)/(bigT-k)
+  A_OLS  <- XtXinv%*%(t(X)%*%y)
+  E_OLS  <- y - X%*%A_OLS
+  S_OLS  <- crossprod(E_OLS)/(bigT-d)
   #---------------------------------------------------------------------------------------------------------
   # Initial Values
   #---------------------------------------------------------------------------------------------------------
-  A_draw  <- matrix(A_OLS, bigT+1, d, byrow=TRUE)
+  A_draw  <- matrix(A_OLS, bigT+1, d, byrow=TRUE, dimnames=list(NULL,colnames(X)))
   S_draw  <- matrix(S_OLS, bigT, 1)
-  Em_draw <- Em_str <- E_OLS
 
   # time-varying stuff
   Am_draw    <- A_OLS
   At_draw    <- matrix(0, bigT+1, d)
-  theta_draw <- rep(1,k)
+  theta_draw <- rep(1,d)
   theta_sqrt <- sqrt(theta_draw)
   #---------------------------------------------------------------------------------------------------------
   # PRIORS
@@ -223,7 +227,7 @@
   #-----------------------------
   # prior mean
   A_prior <- matrix(0,2*d, 1)
-  A_prior[nr,1] <- prmean
+  A_prior[2*nr-1,1] <- prmean
   # prior variance
   tau2_draw <- rep(10,d)
   xi2_draw  <- rep(10,d)
@@ -241,10 +245,15 @@
   #------------------------------------
   # SV quantities
   #------------------------------------
-  # SV
   svdraw  <- list(para=c(mu=-10,phi=.9,sigma=.2,latent0=-3),latent=rep(-3,bigT))
   Sv_draw <- svdraw$latent
   pars_var <- matrix(c(-3,.9,.2,-3),4,1,dimnames=list(c("mu","phi","sigma","latent0"),NULL))
+  Sv_priors <- specify_priors(mu=sv_normal(mean=bmu, sd=Bmu), phi=sv_beta(a0,b0), sigma2=sv_gamma(shape=0.5,rate=1/(2*Bsigma)))
+  #-----------------------------------
+  # non-SV quantities
+  #-----------------------------------
+  sig_eta <- exp(-3)
+  G0 <- g0/S_OLS*(c0-1)
   #---------------------------------------------------------------------------------------------------------
   # SAMPLER MISCELLANEOUS
   #---------------------------------------------------------------------------------------------------------
@@ -278,17 +287,21 @@
   for (irep in 1:ntot){
     #----------------------------------------------------------------------------
     # Step 0: Normalize data
-    Xt <- X*exp(-0.5*Sv_draw)
+    Xt <- apply(X,2,function(x)x*exp(-0.5*Sv_draw))
     yt <- y*exp(-0.5*Sv_draw)
     #----------------------------------------------------------------------------
     # Step 1: Sample coefficients
     Zt <- cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))
 
     Vpriorinv <- diag(1/c(tau2_draw,xi2_draw))
-    V_post <- try(chol2inv(chol(crossprod(Zt)+Vpriorinv)),silent=TRUE)
-    if (is(V_post,"try-error")) V_post <- ginv(crossprod(Zt)+Vpriorinv)
-    A_post <- V_post%*%(crossprod(Zt,yt)+Vpriorinv%*%A_prior)
+    # V_post <- try(chol2inv(chol(crossprod(Zt)+Vpriorinv)),silent=TRUE)
+    # if (is(V_post,"try-error")) V_post <- ginv(crossprod(Zt)+Vpriorinv)
+    # alternative a la supplementary bitto/sfs s.3
+    Vpriorsqrt <- diag(c(sqrt(tau2_draw),sqrt(xi2_draw)))
+    V_poststar <- solve(Vpriorsqrt%*%crossprod(Zt)%*%Vpriorsqrt + diag(2*d))
+    V_post <- Vpriorsqrt%*%V_poststar%*%Vpriorsqrt
 
+    A_post <- V_post%*%(crossprod(Zt,yt)+Vpriorinv%*%A_prior)
     alph_draw <- try(A_post+t(chol(V_post))%*%rnorm(ncol(Zt)),silent=TRUE)
     if (is(alph_draw,"try-error")) alph_draw <- matrix(mvrnorm(1,A_post,V_post),ncol(Zt),1)
 
@@ -306,6 +319,7 @@
     theta_sign <- sign(theta_sqrt)
     A_draw     <- matrix(Am_draw,bigT+1,d,byrow=TRUE) + At_draw%*%diag(theta_sqrt)
     A_diff     <- diff(At_draw%*%diag(theta_sqrt))
+    #A_diff     <- diff(A_draw) # same as line above
     for(dd in 1:d){
       # theta.new
       res <- GIGrvg::rgig(1,
@@ -317,13 +331,13 @@
       # betam.new
       sigma2_A_mean <- 1/((1/tau2_draw[dd]) + (1/theta_draw[dd]))
       mu_A_mean     <- A_draw[1,dd]*tau2_draw[dd]/(tau2_draw[dd] + theta_draw[dd])
-      Am_draw[dd,1] <- rnorm(1, mu_A_mean, sigma2_A_mean)
+      Am_draw[dd,1] <- rnorm(1, mu_A_mean, sqrt(sigma2_A_mean))
     }
     At_draw <- sapply(1:d,function(dd)A_draw[,dd]-Am_draw[dd,1])%*%diag(1/theta_sqrt)
     #----------------------------------------------------------------------------
     # Step 4: Prior choice
     if(prior==1){ # TVP
-
+      ### no hierarchical priors
     }else if(prior==2){ # TVP-NG
       kappa2  <- rgamma(1, d1+a_xi*M^2,  d2+0.5*a_xi*mean(xi2_draw))
       lambda2 <- rgamma(1, e1+a_tau*M^2, e2+0.5*a_tau*mean(tau2_draw))
@@ -355,12 +369,12 @@
     } # END PRIOR QUERY
     #----------------------------------------------------------------------------
     # Step 5: Sample variances
-    eps <- y - rowSums(hadamard.prod(X,A_draw[2:(bigT+1),]))
-    if (sv){
+    eps <- y - cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))%*%alph_draw
+    if(sv){
       para <- as.list(pars_var); names(para) <- c("mu","phi","sigma","latent0")
       para$nu = Inf; para$rho=0; para$beta<-0
       svdraw <- svsample_fast_cpp(y=eps, draws=1, burnin=0, designmatrix=matrix(NA_real_),
-                                  priorspec=specify_priors(), thinpara=1, thinlatent=1, keeptime="all",
+                                  priorspec=Sv_priors, thinpara=1, thinlatent=1, keeptime="all",
                                   startpara=para, startlatent=Sv_draw,
                                   keeptau=FALSE, print_settings=list(quiet=TRUE, n_chains=1, chain=1),
                                   correct_model_misspecification=FALSE, interweave=TRUE, myoffset=0,
@@ -373,45 +387,356 @@
       pars_var     <- unlist(para[c("mu","phi","sigma","latent0")])
       Sv_draw       <- log(h_)
     }else{
-      S_1 <- a_1+bigT/2
-      S_2 <- b_1+crossprod(eps)/2
+      C0  <- rgamma(1, g0+c0, G0+sig_eta)
+      S_1 <- c0+bigT/2
+      S_2 <- C0+crossprod(eps)/2
 
       sig_eta <- 1/rgamma(1,S_1,S_2)
       Sv_draw <- matrix(log(sig_eta),bigT,1)
     }
     #-------------------------------------------------------------------------#
     # STEP 6: RANDOM SIGN SWITCH
-    for(mm in 1:M){
-      for(kk in 1:k){
-        if(runif(1,0,1)>0.5){
-          theta_sqrt[kk,mm] <- -theta_sqrt[kk,mm]
-        }
+    for(dd in 1:d){
+      if(runif(1,0,1)>0.5){
+        theta_sqrt[dd] <- -theta_sqrt[dd]
       }
     }
     #----------------------------------------------------------------------------
     # Step 7: store draws
     if(irep %in% thin.draws){
       count <- count+1
-      A_store[count,,,]      <- A_draw
-      L_store[count,,]       <- L_draw
-      res_store[count,,]     <- Em_draw
+      A_store[count,,]<- A_draw
+      res_store[count,,]<- eps
       # SV
-      Sv_store[count,,]      <- Sv_draw
-      pars_store[count,,]    <- pars_var
+      Sv_store[count,,] <- Sv_draw
+      pars_store[count,,] <- pars_var
       # NG
-      tau2_store[count,,]    <- tau2.draw
-      xi2_store[count,,]     <- xi2.draw
+      tau2_store[count,]<- tau2_draw
+      xi2_store[count,] <- xi2_draw
       lambda2_store[count,,] <- lambda2
-      kappa2_store[count,,]  <- kappa2
-      a_xi_store[count,,]    <- a_xi
-      a_tau_store[count,,]   <- a_tau
+      kappa2_store[count,,] <- kappa2
+      a_xi_store[count,,] <- a_xi
+      a_tau_store[count,,]<- a_tau
     }
   }
   #---------------------------------------------------------------------------------------------------------
   # END ESTIMATION
   #---------------------------------------------------------------------------------------------------------
-  dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X),colnames(A_OLS))
-  ret <- list(Y=Y,X=X,A_store=A_store,L_store=L_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
+  dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X))
+  ret <- list(Y=Y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
+              tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
+  return(ret)
+}
+
+#' @name .TVPBVAR_centered_R.m
+#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom MASS ginv mvrnorm
+#' @importFrom matrixcalc hadamard.prod
+#' @importFrom methods is
+#' @importFrom stats rnorm rgamma runif dnorm
+#' @noRd
+.TVPBVAR_centered_R <- function(nr,Y_in,p_in,draws_in,burnin_in,cons_in,trend_in,sv_in,thin_in,quiet_in,prior_in,hyperparam_in,Ex_in){
+  #----------------------------------------INPUTS----------------------------------------------------#
+  Yraw  <- Y_in
+  p     <- p_in
+  Traw  <- nrow(Yraw)
+  M     <- ncol(Yraw)
+  K     <- M*p
+  Ylag  <- .mlag(Yraw,p)
+  names <- colnames(Yraw)
+  if(is.null(names)) names <- rep("Y",M)
+  colnames(Yraw) <- names
+  nameslags <- NULL
+  for(ii in 1:p) nameslags <- c(nameslags,paste0(names,".lag",ii))
+  colnames(Ylag) <- nameslags
+
+  texo <- FALSE; Mex <- 0; Exraw <- NULL
+  if(!is.null(Ex_in)){
+    Exraw <- Ex_in; Mex <- ncol(Exraw); texo <- TRUE
+    enames <- colnames(Exraw)
+    if(is.null(enames)) enames <- rep("Tex",Mex)
+    colnames(Exraw) <- enames
+  }
+
+  if(nr==1) slct <- NULL else slct <- 1:(nr-1)
+
+  Xraw  <- cbind(Yraw[,slct],Ylag,Exraw)
+  colnames(Xraw) <- c(colnames(Yraw)[slct],nameslags,enames)
+  X     <- Xraw[(p+1):nrow(Xraw),,drop=FALSE]
+  y     <- Yraw[(p+1):Traw,nr,drop=FALSE]
+  bigT  <- nrow(X)
+  M_    <- M-length(slct)
+
+  cons  <- cons_in
+  if(cons){
+    X <- cbind(X,1)
+    colnames(X)[ncol(X)] <- "cons"
+  }
+  trend <- trend_in
+  if(trend){
+    X <- cbind(X,seq(1,bigT))
+    colnames(X)[ncol(X)] <- "trend"
+  }
+
+  d <- ncol(X)
+  n <- d*M
+  v <- (M*(M-1))/2
+  #---------------------------------------------------------------------------------------------------------
+  # HYPERPARAMETERS
+  #---------------------------------------------------------------------------------------------------------
+  hyperpara      <- hyperparam_in
+  prior          <- prior_in
+  sv             <- sv_in
+  prmean         <- hyperpara$prmean
+  # non-SV
+  c0             <- hyperpara$c0
+  g0             <- hyperpara$g0
+  # SV
+  bmu            <- hyperpara$bmu
+  Bmu            <- hyperpara$Bmu
+  a0             <- hyperpara$a0
+  b0             <- hyperpara$b0
+  Bsigma         <- hyperpara$Bsigma
+  # TTVP
+  B_1            <- hyperpara$B_1
+  B_2            <- hyperpara$B_2
+  kappa0         <- hyperpara$kappa0
+  a_tau          <- hyperpara$a_tau
+  c_tau          <- hyperpara$c_tau
+  d_tau          <- hyperpara$d_tau
+  h0prior        <- hyperpara$h0prior
+  grid.length    <- hyperpara$grid.length
+  thrsh.pct      <- hyperpara$thrsh.pct
+  thrsh.pct.high <- hyperpara$thres.pct.high
+  TVS            <- hyperpara$TVS
+  cons.mod       <- hyperpara$cons.mod
+  robust         <- hyperpara$robust
+  a.approx       <- hyperpara$a.approx
+  sim.kappa      <- hyperpara$sim.kappa
+  kappa.grid     <- hyperpara$kappa.grid
+  #---------------------------------------------------------------------------------------------------------
+  # OLS Quantitites
+  #---------------------------------------------------------------------------------------------------------
+  XtXinv <- try(solve(crossprod(X)),silent=TRUE)
+  if(is(XtXinv,"try-error")) XtXinv <- ginv(crossprod(X))
+  A_OLS  <- XtXinv%*%(t(X)%*%y)
+  E_OLS  <- y - X%*%A_OLS
+  S_OLS  <- crossprod(E_OLS)/(bigT-d)
+  #---------------------------------------------------------------------------------------------------------
+  # Initial Values
+  #---------------------------------------------------------------------------------------------------------
+  A_draw  <- matrix(A_OLS, bigT+1, d, byrow=TRUE, dimnames=list(NULL,colnames(X)))
+  S_draw  <- matrix(S_OLS, bigT, 1)
+
+  # time-varying stuff
+  Am_draw    <- A_OLS
+  At_draw    <- matrix(0, bigT+1, d)
+  theta_draw <- rep(1,d)
+  theta_sqrt <- sqrt(theta_draw)
+  #---------------------------------------------------------------------------------------------------------
+  # PRIORS
+  #---------------------------------------------------------------------------------------------------------
+  # Priors on VAR coefs
+  #-----------------------------
+  # prior mean
+  A_prior <- matrix(0,2*d, 1)
+  A_prior[2*nr-1,1] <- prmean
+  # prior variance
+  tau2_draw <- rep(10,d)
+  xi2_draw  <- rep(10,d)
+
+  # NG stuff
+  lambda2      <- 10
+  a_tau        <- a_start
+  scale_tau    <- .43
+  acc_tau      <- 0
+
+  kappa2       <- 10
+  a_xi         <- a_start
+  scale_xi     <- .43
+  acc_xi       <- 0
+  #------------------------------------
+  # SV quantities
+  #------------------------------------
+  svdraw  <- list(para=c(mu=-10,phi=.9,sigma=.2,latent0=-3),latent=rep(-3,bigT))
+  Sv_draw <- svdraw$latent
+  pars_var <- matrix(c(-3,.9,.2,-3),4,1,dimnames=list(c("mu","phi","sigma","latent0"),NULL))
+  Sv_priors <- specify_priors(mu=sv_normal(mean=bmu, sd=Bmu), phi=sv_beta(a0,b0), sigma2=sv_gamma(shape=0.5,rate=1/(2*Bsigma)))
+  #-----------------------------------
+  # non-SV quantities
+  #-----------------------------------
+  sig_eta <- exp(-3)
+  G0 <- g0/S_OLS*(c0-1)
+  #---------------------------------------------------------------------------------------------------------
+  # SAMPLER MISCELLANEOUS
+  #---------------------------------------------------------------------------------------------------------
+  nsave <- draws_in
+  nburn <- burnin_in
+  ntot  <- nsave+nburn
+
+  # thinning
+  thin         <- thin_in
+  count <- 0
+  thindraws    <- nsave/thin
+  thin.draws   <- seq(nburn+1,ntot,by=thin)
+  #---------------------------------------------------------------------------------------------------------
+  # STORAGES
+  #---------------------------------------------------------------------------------------------------------
+  A_store      <- array(NA,c(thindraws,bigT+1,d))
+  Am_store     <- array(NA,c(thindraws,d,1))
+  At_store     <- array(NA,c(thindraws,bigT+1,d))
+  Sv_store     <- array(NA,c(thindraws,bigT,1))
+  pars_store   <- array(NA,c(thindraws,4,1))
+  tau2_store   <- array(NA,c(thindraws,d))
+  xi2_store    <- array(NA,c(thindraws,d))
+  # TVP-NG
+  lambda2_store<- array(NA,c(thindraws,p,1))
+  kappa2_store <- array(NA,c(thindraws,1,1))
+  a_xi_store   <- array(NA,c(thindraws,1,1))
+  a_tau_store  <- array(NA,c(thindraws,p,1))
+  #---------------------------------------------------------------------------------------------------------
+  # MCMC LOOP
+  #---------------------------------------------------------------------------------------------------------
+  for (irep in 1:ntot){
+    #----------------------------------------------------------------------------
+    # Step 0: Normalize data
+    Xt <- apply(X,2,function(x)x*exp(-0.5*Sv_draw))
+    yt <- y*exp(-0.5*Sv_draw)
+    #----------------------------------------------------------------------------
+    # Step 1: Sample coefficients
+    Zt <- cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))
+
+    Vpriorinv <- diag(1/c(tau2_draw,xi2_draw))
+    # V_post <- try(chol2inv(chol(crossprod(Zt)+Vpriorinv)),silent=TRUE)
+    # if (is(V_post,"try-error")) V_post <- ginv(crossprod(Zt)+Vpriorinv)
+    # alternative a la supplementary bitto/sfs s.3
+    Vpriorsqrt <- diag(c(sqrt(tau2_draw),sqrt(xi2_draw)))
+    V_poststar <- solve(Vpriorsqrt%*%crossprod(Zt)%*%Vpriorsqrt + diag(2*d))
+    V_post <- Vpriorsqrt%*%V_poststar%*%Vpriorsqrt
+
+    A_post <- V_post%*%(crossprod(Zt,yt)+Vpriorinv%*%A_prior)
+    alph_draw <- try(A_post+t(chol(V_post))%*%rnorm(ncol(Zt)),silent=TRUE)
+    if (is(alph_draw,"try-error")) alph_draw <- matrix(mvrnorm(1,A_post,V_post),ncol(Zt),1)
+
+    Am_draw    <- alph_draw[1:d,,drop=FALSE]
+    theta_sqrt <- alph_draw[(d+1):(2*d),,drop=TRUE]
+    theta_draw <- theta_sqrt^2
+    #----------------------------------------------------------------------------
+    # Step 2: Sample TVP-coef
+    ystar <- yt - Xt%*%Am_draw
+    Fstar <- Xt%*%diag(theta_sqrt)
+
+    At_draw <- sample_McCausland(ystar, Fstar)
+    #----------------------------------------------------------------------------
+    # Step 3: Interweaving
+    theta_sign <- sign(theta_sqrt)
+    A_draw     <- matrix(Am_draw,bigT+1,d,byrow=TRUE) + At_draw%*%diag(theta_sqrt)
+    A_diff     <- diff(At_draw%*%diag(theta_sqrt))
+    #A_diff     <- diff(A_draw) # same as line above
+    for(dd in 1:d){
+      # theta.new
+      res <- GIGrvg::rgig(1,
+                          lambda=-bigT/2,
+                          chi=sum(A_diff[,dd]^2)+(A_draw[1,dd]-Am_draw[dd,1])^2,
+                          psi=1/xi2_draw[dd])
+      theta_draw[dd] <- res
+      theta_sqrt[dd] <- sqrt(res)*theta_sign[dd]
+      # betam.new
+      sigma2_A_mean <- 1/((1/tau2_draw[dd]) + (1/theta_draw[dd]))
+      mu_A_mean     <- A_draw[1,dd]*tau2_draw[dd]/(tau2_draw[dd] + theta_draw[dd])
+      Am_draw[dd,1] <- rnorm(1, mu_A_mean, sqrt(sigma2_A_mean))
+    }
+    At_draw <- sapply(1:d,function(dd)A_draw[,dd]-Am_draw[dd,1])%*%diag(1/theta_sqrt)
+    #----------------------------------------------------------------------------
+    # Step 4: Prior choice
+    if(prior==1){ # TVP
+      ### no hierarchical priors
+    }else if(prior==2){ # TVP-NG
+      kappa2  <- rgamma(1, d1+a_xi*M^2,  d2+0.5*a_xi*mean(xi2_draw))
+      lambda2 <- rgamma(1, e1+a_tau*M^2, e2+0.5*a_tau*mean(tau2_draw))
+      for(dd in 1:d){
+        xi2_draw[dd]  <- do_rgig1(lambda=a_xi-0.5,  chi=theta_draw[dd], psi=a_xi*kappa2)
+        tau2_draw[dd] <- do_rgig1(lambda=a_tau-0.5, chi=(Am_draw[dd,1]-A_prior[dd,1])^2, psi=a_tau*lambda2)
+      }
+      xi2_draw[xi2_draw<1e-7] <- 1e-7
+      tau2_draw[tau2_draw<1e-7] <- 1e-7
+      if(sample_A){
+        before <- a_xi
+        a_xi   <- MH_step(a_xi, scale_xi, d*M, kappa2, theta_sqrt, b_xi, nu_xi, d1, d2)
+        if(before!=a_xi){
+          acc_xi <- acc_xi + 1
+        }
+        before <- a_tau
+        a_tau  <- MH_step(a_tau, scale_xi, M^2, lambda2, Am_draw, b_tau, nu_tau, e1, e2)
+        if(before!=a_tau){
+          acc_tau <- acc_tau + 1
+        }
+        # scale MH proposal during the first 50% of the burn-in stage
+        if(irep<(0.5*burnin)){
+          if((acc_xi/irep)>0.30){scale_xi <- 1.01*scale_xi}
+          if((acc_xi/irep)<0.15){scale_xi <- 0.99*scale_xi}
+          if((acc_tau/irep)>0.30){scale_xi <- 1.01*scale_xi}
+          if((acc_tau/irep)<0.15){scale_xi <- 0.99*scale_xi}
+        }
+      }
+    } # END PRIOR QUERY
+    #----------------------------------------------------------------------------
+    # Step 5: Sample variances
+    eps <- y - cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))%*%alph_draw
+    if(sv){
+      para <- as.list(pars_var); names(para) <- c("mu","phi","sigma","latent0")
+      para$nu = Inf; para$rho=0; para$beta<-0
+      svdraw <- svsample_fast_cpp(y=eps, draws=1, burnin=0, designmatrix=matrix(NA_real_),
+                                  priorspec=Sv_priors, thinpara=1, thinlatent=1, keeptime="all",
+                                  startpara=para, startlatent=Sv_draw,
+                                  keeptau=FALSE, print_settings=list(quiet=TRUE, n_chains=1, chain=1),
+                                  correct_model_misspecification=FALSE, interweave=TRUE, myoffset=0,
+                                  fast_sv=default_fast_sv)
+      h_           <- exp(svdraw$latent[1,])
+      para$mu      <- svdraw$para[1,"mu"]
+      para$phi     <- svdraw$para[1,"phi"]
+      para$sigma   <- svdraw$para[1,"sigma"]
+      para$latent0 <- svdraw$latent0[1,"h_0"]
+      pars_var     <- unlist(para[c("mu","phi","sigma","latent0")])
+      Sv_draw       <- log(h_)
+    }else{
+      C0  <- rgamma(1, g0+c0, G0+sig_eta)
+      S_1 <- c0+bigT/2
+      S_2 <- C0+crossprod(eps)/2
+
+      sig_eta <- 1/rgamma(1,S_1,S_2)
+      Sv_draw <- matrix(log(sig_eta),bigT,1)
+    }
+    #-------------------------------------------------------------------------#
+    # STEP 6: RANDOM SIGN SWITCH
+    for(dd in 1:d){
+      if(runif(1,0,1)>0.5){
+        theta_sqrt[dd] <- -theta_sqrt[dd]
+      }
+    }
+    #----------------------------------------------------------------------------
+    # Step 7: store draws
+    if(irep %in% thin.draws){
+      count <- count+1
+      A_store[count,,]<- A_draw
+      res_store[count,,]<- eps
+      # SV
+      Sv_store[count,,] <- Sv_draw
+      pars_store[count,,] <- pars_var
+      # NG
+      tau2_store[count,]<- tau2_draw
+      xi2_store[count,] <- xi2_draw
+      lambda2_store[count,,] <- lambda2
+      kappa2_store[count,,] <- kappa2
+      a_xi_store[count,,] <- a_xi
+      a_tau_store[count,,]<- a_tau
+    }
+  }
+  #---------------------------------------------------------------------------------------------------------
+  # END ESTIMATION
+  #---------------------------------------------------------------------------------------------------------
+  dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X))
+  ret <- list(Y=Y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
               tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
   return(ret)
 }
@@ -470,12 +795,13 @@
   prmean    <- hyperpara$prmean
   a_1       <- hyperpara$a_1
   b_1       <- hyperpara$b_1
-  crit_eig  <- hyperpara$crit_eig
+  # SV
   Bsigma    <- hyperpara$Bsigma
   a0        <- hyperpara$a0
   b0        <- hyperpara$b0
   bmu       <- hyperpara$bmu
   Bmu       <- hyperpara$Bmu
+  # other stuff
   d1        <- hyperpara$d1
   d2        <- hyperpara$d2
   e1        <- hyperpara$e1
@@ -554,7 +880,7 @@
 
   hv <- svdraw$latent
   para <- list(mu=-3,phi=.9,sigma=.2)
-
+  Sv_priors <- specify_priors(mu=sv_normal(mean=bmu, sd=Bmu), phi=sv_beta(a0,b0), sigma2=sv_gamma(shape=0.5,rate=1/(2*Bsigma)))
   eta <- list()
   #---------------------------------------------------------------------------------------------------------
   # SAMPLER MISCELLANEOUS
@@ -658,7 +984,7 @@
         # Am_new
         sigma2_A_mean  <- 1/((1/tau2.draw[kk,mm]) + (1/theta_draw[kk,mm]))
         mu_A_mean      <- A_draw[1,kk,mm]*tau2.draw[kk,mm]/(tau2.draw[kk,mm] + theta_draw[kk,mm])
-        Am_draw[kk,mm] <- rnorm(1, mu_A_mean, sigma2_A_mean)
+        Am_draw[kk,mm] <- rnorm(1, mu_A_mean, sqrt(sigma2_A_mean))
       }
       At_draw[,,mm] <- sapply(1:k,function(kk)A_draw[,kk,mm]-Am_draw[kk,mm])%*%diag(1/theta_sqrt[,mm])
     }
@@ -745,7 +1071,7 @@
         para   <- as.list(pars_var[,jj])
         para$nu = Inf; para$rho=0; para$beta<-0
         svdraw <- svsample_fast_cpp(y=Em_str[,jj], draws=1, burnin=0, designmatrix=matrix(NA_real_),
-                                    priorspec=specify_priors(), thinpara=1, thinlatent=1, keeptime="all",
+                                    priorspec=Sv_priors, thinpara=1, thinlatent=1, keeptime="all",
                                     startpara=para, startlatent=Sv_draw[,jj],
                                     keeptau=FALSE, print_settings=list(quiet=TRUE, n_chains=1, chain=1),
                                     correct_model_misspecification=FALSE, interweave=TRUE, myoffset=0,

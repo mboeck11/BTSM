@@ -58,8 +58,10 @@ tvpbvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE,
     A.true[upper.tri(A.true)] <- runif((M-1)*M/2,-0.2,0.2)
     A.true[lower.tri(A.true)] <- runif((M-1)*M/2,-0.2,0.2)
     avec <- as.vector(A.true)
-    for(kk in 1:length(indic.coef)){
-      avec[indic.coef[kk]] <- 0
+    if(length(indic.coef)>0){
+      for(kk in 1:length(indic.coef)){
+        avec[indic.coef[kk]] <- 0
+      }
     }
     A.true <- matrix(avec,M*plag,M)
     crit_eig <- max(abs(Re(eigen(A.true)$values)))
@@ -68,8 +70,10 @@ tvpbvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE,
   At.true <- array(NA, c(len,M,M))
   Qt.true <- diag(M^2*plag)*tvp.var
   indic.tvp<-sample(1:(M^2*plag), size=floor(M^2*plag*sparse.tvp))
-  for(kk in 1:length(indic.tvp)){
-    Qt.true[indic.tvp[kk],indic.tvp[kk]] <- 0
+  if(length(indic.tvp)>0){
+    for(kk in 1:length(indic.tvp)){
+      Qt.true[indic.tvp[kk],indic.tvp[kk]] <- 0
+    }
   }
   At.true[1,,] <- A.true
   tt<-2

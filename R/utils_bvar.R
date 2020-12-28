@@ -191,7 +191,7 @@
   prmean    <- hyperpara$prmean
   a_1       <- hyperpara$a_1
   b_1       <- hyperpara$b_1
-  crit_eig  <- hyperpara$crit_eig
+  # SV
   Bsigma    <- hyperpara$Bsigma
   a0        <- hyperpara$a0
   b0        <- hyperpara$b0
@@ -309,7 +309,7 @@
 
   hv <- svdraw$latent
   para <- list(mu=-3,phi=.9,sigma=.2)
-
+  Sv_priors <- specify_priors(mu=sv_normal(mean=bmu, sd=Bmu), phi=sv_beta(a0,b0), sigma2=sv_gamma(shape=0.5,rate=1/(2*Bsigma)))
   eta <- list()
   #---------------------------------------------------------------------------------------------------------
   # SAMPLER MISCELLANEOUS
@@ -527,7 +527,7 @@
         para   <- as.list(pars_var[,jj])
         para$nu = Inf; para$rho=0; para$beta<-0
         svdraw <- svsample_fast_cpp(y=Em_str[,jj], draws=1, burnin=0, designmatrix=matrix(NA_real_),
-                                    priorspec=specify_priors(), thinpara=1, thinlatent=1, keeptime="all",
+                                    priorspec=Sv_priors, thinpara=1, thinlatent=1, keeptime="all",
                                     startpara=para, startlatent=Sv_draw[,jj],
                                     keeptau=FALSE, print_settings=list(quiet=TRUE, n_chains=1, chain=1),
                                     correct_model_misspecification=FALSE, interweave=TRUE, myoffset=0,

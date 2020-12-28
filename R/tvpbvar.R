@@ -125,11 +125,11 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thi
   args$thindraws <- draws/thin
   # set default
   if(verbose) cat("Hyperparameter setup: \n")
-  default_hyperpara <- list(a_1=0.01,b_1=0.01, prmean=0,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
+  default_hyperpara <- list(c0=2.5,g0=5, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
-                            d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=TRUE) # TVP-NG
-  paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","d1","d2","e1","e2",
-                 "b_xi","b_tau","nu_xi","nu_tau","a_start","a_log","sample_A")
+                            d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=TRUE, # TVP-NG
+                            B_1=2,B_2=1,kappa0=1e-07,a_tau=0.1,c_tau=0.01,d_tau=0.01,h0prior="stationary",grid.length=150,thrsh.pct=0.1,thres.pct.high=1,TVS=TRUE,cons.mod=TRUE,robust=TRUE,a.approx=FALSE,sim.kappa=FALSE,kappa.grid=seq(1e-4,0.1,10)) # TTVP
+  paras     <- names(default_hyperpara)
   if(is.null(hyperpara)){
     if(verbose) cat("\t No hyperparameters are chosen, default setting applied.\n")
   }
