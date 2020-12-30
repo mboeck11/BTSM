@@ -42,3 +42,27 @@ MH_step <- function(current_val, c_tuning_par, d, scale_par, param_vec, b, nu, h
     .Call(`_BTSM_MH_step`, current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2)
 }
 
+get_threshold <- function(Achg1, SIGMAS1, SIGMAS2, threshgrid, Aapprox) {
+    .Call(`_BTSM_get_threshold`, Achg1, SIGMAS1, SIGMAS2, threshgrid, Aapprox)
+}
+
+dinvgamma <- function(x, a, b) {
+    .Call(`_BTSM_dinvgamma`, x, a, b)
+}
+
+KF <- function(y, Z, Ht, Qtt, m, p, t, B0, V0) {
+    .Call(`_BTSM_KF`, y, Z, Ht, Qtt, m, p, t, B0, V0)
+}
+
+get_lik <- function(y, Z, Ht, Qtt, m, p, t, B0, V0) {
+    .Call(`_BTSM_get_lik`, y, Z, Ht, Qtt, m, p, t, B0, V0)
+}
+
+KF_fast <- function(y, Z, Ht, Qtt, m, p, t, B0, V0) {
+    .Call(`_BTSM_KF_fast`, y, Z, Ht, Qtt, m, p, t, B0, V0)
+}
+
+KF_MH <- function(y, Z, Ht, Qtt, m, p, t, B0, V0) {
+    .Call(`_BTSM_KF_MH`, y, Z, Ht, Qtt, m, p, t, B0, V0)
+}
+

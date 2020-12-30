@@ -40,7 +40,7 @@ We also provide S3methods for each function as summarized in the next table
 | Bayesian Interacted Vector Autoregression             | `bivar()`   | no        | no          | no         | no       | no       | no        |
 | Bayesian Panel Vector Autoregressions                 | `bpvar()`   | no        | no          | no         | no       | no       | no        |
 | Bayesian Interacted Panel Vector Autoregression       | no          | no        | no          | no         | no       | no       | no        |
-| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | no        | no          | no         | no       | no       | no        |
+| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | yes       | no          | no         | no       | no       | no        |
 
 ## References
 

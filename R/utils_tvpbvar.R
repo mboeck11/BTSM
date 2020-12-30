@@ -5,119 +5,143 @@
 .TVPBVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex, applyfun, cores){
   class(Yraw) <- "numeric"
   prior_in <- prior
-  if(!is.null(default_hyperpara[["a_log"]])){
-    default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
-  }
-  nr <- 1
-  Y_in=Yraw
-  p_in=plag
-  draws_in=draws
-  burnin_in=burnin
-  cons_in=cons
-  trend_in=trend
-  sv_in=SV
-  thin_in=thin
-  prior_in=prior_in
-  hyperparam_in=default_hyperpara
-  Ex_in=Ex
+  if(default_hyperpara[["a_log"]]) default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
+  # nr <- 1
+  # Y_in=Yraw
+  # p_in=plag
+  # draws_in=draws
+  # burnin_in=burnin
+  # cons_in=cons
+  # trend_in=trend
+  # sv_in=SV
+  # thin_in=thin
+  # prior_in=prior_in
+  # hyperparam_in=default_hyperpara
+  # Ex_in=Ex
   if(prior=="TVP" || prior=="TVP-NG"){
     prior_in <- ifelse(prior=="TVP",1,2)
     post_draws <- applyfun(1:ncol(Yraw), function(nr){
       .TVPBVAR_noncentered_R(nr=nr,Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
     })
+    tvpbvar <- .var_posterior(post_draws, prior, draws/thin, applyfun, cores)
   }else if(prior=="TTVP"){
     prior_in <- 3
     post_draws <- applyfun(1:ncol(Yraw), function(nr){
       .TVPBVAR_centered_R(nr=nr,Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
     })
+    tvpbvar <- .var_posterior(post_draws, prior, draws/thin, applyfun, cores)
   }
-
   #tvpbvar<-.TVPBVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   #------------------------------------------------ get data ----------------------------------------#
   Y <- tvpbvar$Y; colnames(Y) <- colnames(Yraw); X <- tvpbvar$X
   M <- ncol(Y); bigT <- nrow(Y); K <- ncol(X)
   if(!is.null(Ex)) Mex <- ncol(Ex)
-  xnames <- paste(rep("Ylag",M),rep(seq(1,plag),each=M),sep="")
-  if(!is.null(Ex)) xnames <- c(xnames,paste(rep("Tex",Mex)))
-  if(cons)  xnames <- c(xnames,"cons")
-  if(trend) xnames <- c(xnames,"trend")
-  colnames(X) <- xnames
+  names <- colnames(Yraw)
+  if(is.null(names)) names <- rep("Y",M)
+  xnames <-NULL
+  for(ii in 1:plag) xnames <- c(xnames,paste0(names,".lag",ii))
+  if(!is.null(Ex)) enames <- c(enames,paste(rep("Tex",Mex))) else enames <- NULL
+  if(cons)  cnames <- "cons" else cnames <- NULL
+  if(trend) tnames <- "trend" else tnames <- NULL
+  colnames(X) <- c(xnames,enames,cnames,tnames)
   #-----------------------------------------get containers ------------------------------------------#
-  A_store <- tvpbvar$A_store; dimnames(A_store)[[3]] <- colnames(X); dimnames(A_store)[[4]] <- colnames(Y)
+  A_store <- tvpbvar$A_store; dimnames(A_store)[[2]] <- paste("t",seq(1,bigT),sep="."); dimnames(A_store)[[3]] <- colnames(X); dimnames(A_store)[[4]] <- colnames(Y)
   # splitting up stores
-  dims          <- dimnames(A_store)[[3]]
-  a0store <- a1store <- Exstore <- NULL
-  if(cons) {
-    a0store       <- adrop(A_store[,,which(dims=="cons"),,drop=FALSE],drop=3)
+  dims  <- dimnames(A_store)[[3]]
+  a0_store <- a1_store <- Ex_store <- Phi_store <- NULL
+  if(cons) a0_store <- A_store[,,which(dims%in%cnames),]
+  if(trend) a1_store <- A_store[,,which(dims%in%tnames),]
+  if(!is.null(Ex)) Ex_store <- A_store[,which(dims%in%enames),,drop=FALSE]
+  for(jj in 1:plag) {
+    xnames.jj <- xnames[grepl(paste0("lag",jj),xnames)]
+    Phi_store[[jj]] <- A_store[,,which(dims%in%xnames.jj),]
+    dimnames(Phi_store[[jj]]) <- list(NULL,paste("t",seq(1,bigT),sep="."),xnames.jj,names)
   }
-  if(trend){
-    a1store     <- adrop(A_store[,,which(dims=="trend"),,drop=FALSE],drop=3)
-  }
-  if(!is.null(Ex)){
-    Exstore     <- A_store[,,which(dims=="Tex"),,drop=FALSE]
-  }
-  Phistore    <- NULL
-  for(jj in 1:plag){
-    Phistore[[jj]]  <- A_store[,,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
-  }
-  S_store <- array(NA, c(draws/thin,bigT,M,M)); dimnames(S_store) <- list(NULL,NULL,colnames(Y),colnames(Y))
-  if(prior%in%c("TVP-NG")){
-    L_store <- tvpbvar$L_store
-    for(irep in 1:(draws/thin)){
-      for(tt in 1:bigT){
-        if(M>1){
-          S_store[irep,tt,,] <- L_store[irep,,]%*%diag(exp(tvpbvar$Sv_store[irep,tt,]))%*%t(L_store[irep,,])
-        }else{
-          S_store[irep,tt,,] <- L_store[irep,,]%*%exp(tvpbvar$Sv_store[irep,tt,])%*%t(L_store[irep,,])
-        }
-      }
-    }
-    Smed_store <- apply(S_store,c(1,3,4),median)
-    if(SV){
-      vola_store  <- tvpbvar$Sv_store; dimnames(vola_store) <- list(NULL,NULL,colnames(Y))
-      pars_store  <- tvpbvar$pars_store
-      vola_post   <- apply(vola_store,c(2,3),median)
-      pars_post   <- apply(pars_store,c(2,3),median)
-    }else{
-      vola_store  <- tvpbvar$Sv_store; pars_store <- NULL;
-      vola_post   <- apply(vola_store,c(2,3),median); pars_post <- NULL
-    }
-  }
-  res_store       <- tvpbvar$res_store; dimnames(res_store) <- list(NULL,NULL,colnames(Y))
+  L_store <- tvpbvar$L_store
+  S_store <- tvpbvar$S_store
+  Smed_store <- tvpbvar$Smed_store
+  vola_store <- tvpbvar$Sv_store; dimnames(vola_store) <- list(NULL,NULL,colnames(Y))
+  if(SV) pars_store <- tvpbvar$pars_store else pars_store <- NULL
+  res_store <- tvpbvar$res_store; dimnames(res_store) <- list(NULL,NULL,colnames(Y))
   # NG
-  if(prior=="TVP-NG"){
+  if(prior=="TVP"){
+    tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store <- NULL
+    D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store <- NULL
+  }else if(prior=="TVP-NG"){
+    D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
     tau2_store    <- tvpbvar$tau2_store
     xi2_store     <- tvpbvar$xi2_store
     lambda2_store <- tvpbvar$lambda2_store
     kappa2_store  <- tvpbvar$kappa2_store
     a_tau_store   <- tvpbvar$a_tau_store
     a_xi_store    <- tvpbvar$a_xi_store
-    tau2_post     <- apply(tau2_store,c(2,3),median)
-    xi2_post      <- apply(xi2_store,c(2,3),median)
-    lambda2_post  <- apply(lambda2_store,c(2,3),median)
-    kappa2_post   <- apply(kappa2_store,c(2,3),median)
-    a_tau_post    <- apply(a_tau_store,c(2,3),median)
-    a_xi_post     <- apply(a_xi_store,c(2,3),median)
+    Ltau2_store   <- tvpbvar$Ltau2_store
+    Lxi2_store    <- tvpbvar$Lxi2_store
+  }else if(prior=="TTVP"){
+    tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store<-NULL
+    D_store       <- tvpbvar$D_store
+    Omega_store   <- tvpbvar$Omega_store
+    thrsh_store   <- tvpbvar$thrsh_store
+    kappa_store   <- tvpbvar$kappa_store
+    V0_store      <- tvpbvar$V0_store
+    LD_store      <- tvpbvar$LD_store
+    LOmega_store  <- tvpbvar$LOmega_store
+    Lthrsh_store  <- tvpbvar$Lthrsh_store
+    LV0_store     <- tvpbvar$LV0_store
   }
-  store <- list(A_store=A_store,a0store=a0store,a1store=a1store,Phistore=Phistore,Exstore=Exstore,S_store=S_store,Smed_store=Smed_store,
-                L_store=L_store,vola_store=vola_store,pars_store=pars_store,res_store=res_store,
-                tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_tau_store=a_tau_store,a_xi_store=a_xi_store)
+  store <- list(A_store=A_store,a0_store=a0_store,a1_store=a1_store,Phi_store=Phi_store,Ex_store=Ex_store,S_store=S_store,Smed_store=Smed_store,L_store=L_store,
+                vola_store=vola_store,pars_store=pars_store,res_store=res_store,tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,
+                kappa2_store=kappa2_store,a_tau_store=a_tau_store,a_xi_store=a_xi_store,Ltau2_store=Ltau2_store,Lxi2_store=Lxi2_store,D_store=D_store,
+                Omega_store=Omega_store,thrsh_store=thrsh_store,kappa_store=kappa_store,V0_store=V0_store,LD_store=LD_store,LOmega_store=LOmega_store,
+                Lthrsh_store=Lthrsh_store,LV0_store=LV0_store)
   #------------------------------------ compute posteriors -------------------------------------------#
   A_post      <- apply(A_store,c(2,3,4),median)
+  L_post      <- apply(L_store,c(2,3,4),median)
   S_post      <- apply(S_store,c(2,3,4),median)
+  Smed_post   <- apply(Smed_store,c(2,3),median)
   Sig         <- apply(S_post,c(2,3),mean)/(bigT-K)
   res_post    <- apply(res_store,c(2,3),median)
   # splitting up posteriors
-  a0post <- a1post <- Expost <- NULL
-  if(cons)  a0post <- A_post[,which(dims=="cons"),,drop=FALSE]
-  if(trend) a1post <- A_post[,which(dims=="trend"),,drop=FALSE]
-  if(!is.null(Ex)) Expost <- A_post[,which(dims=="Tex"),,drop=FALSE]
-  Phipost     <- NULL
+  a0_post <- a1_post <- Ex_post <- NULL
+  if(cons)  a0_post <- A_post[,which(dims=="cons"),,drop=FALSE]
+  if(trend) a1_post <- A_post[,which(dims=="trend"),,drop=FALSE]
+  if(!is.null(Ex)) Ex_post <- A_post[,which(dims=="Tex"),,drop=FALSE]
+  Phi_post<- NULL
   for(jj in 1:plag){
-    Phipost[[jj]]    <- A_post[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
+    Phi_post[[jj]]    <- A_post[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
   }
-  post <- list(A_post=A_post,a0post=a0post,a1post=a1post,Phipost=Phipost,Expost=Expost,S_post=S_post,Sig=Sig,vola_post=vola_post,pars_post=pars_post,res_post=res_post,
-               tau2_post=tau2_post,xi2_post=xi2_post,lambda2_post=lambda2_post,kappa2_post=kappa2_post,a_tau_post=a_tau_post,a_xi_post=a_xi_post)
+  vola_post <- apply(vola_store,c(2,3),median)
+  if(SV) pars_post <- apply(pars_store,c(2,3),median) else pars_post <- NULL
+  if(prior=="TVP"){
+    tau2_post<-xi2_post<-lambda2_post<-kappa2_post<-a_tau_post<-a_xi_post<-Ltau2_post<-Lxi2_post<-NULL
+    D_post<-Omega_post<-thrsh_post<-kappa_post<-V0_post<-LD_post<-LOmega_post<-Lthrsh_post<-LV0_post<-NULL
+  }else if(prior=="TVP-NG"){
+    D_post<-Omega_post<-thrsh_post<-kappa_post<-V0_post<-LD_post<-LOmega_post<-Lthrsh_post<-LV0_post<-NULL
+    tau2_post <- apply(tau2_store,c(2,3),median)
+    xi2_post  <- apply(xi2_store,c(2,3),median)
+    lambda2_post <- apply(lambda2_store,c(2,3),median)
+    kappa2_post <- apply(kappa2_store,c(2,3),median)
+    a_tau_post <- apply(a_tau_store,c(2,3),median)
+    a_xi_post <- apply(a_xi_store,c(2,3),median)
+    Ltau2_post <- lapply(Ltau2_store,function(l)apply(l,c(2),median))
+    Lxi2_post <- lapply(Lxi2_store,function(l)apply(l,c(2),median))
+  }else if(prior=="TTVP"){
+    tau2_post<-xi2_post<-lambda2_post<-kappa2_post<-a_tau_post<-a_xi_post<-Ltau2_post<-Lxi2_post<-NULL
+    D_post <- apply(D_store,c(2,3.4),median)
+    Omega_post <- apply(Omega_store,c(2,3,4),median)
+    thrsh_post <- apply(thrsh_store,c(2,3),median)
+    kappa_post <- apply(kappa_store,c(2,3),median)
+    V0_post <- apply(V0_store,c(2,3),median)
+    LD_post <- lapply(LD_store,function(l)apply(l,c(2,3),median))
+    LOmega_post <- lapply(LOmega_store,function(l)apply(l,c(2,3),median))
+    Lthrsh_post <- lapply(Lthrsh_store,function(l)apply(l,2,median))
+    LV0_post <- lapply(LV0_store,function(l)apply(l,2,median))
+  }
+  post <- list(A_post=A_post,a0_post=a0_post,a1_post=a1_post,Phi_post=Phi_post,Ex_post=Ex_post,S_post=S_post,Smed_post=Smed_post,L_post=L_post,
+                vola_post=vola_post,pars_post=pars_post,res_post=res_post,tau2_post=tau2_post,xi2_post=xi2_post,lambda2_post=lambda2_post,
+                kappa2_post=kappa2_post,a_tau_post=a_tau_post,a_xi_post=a_xi_post,Ltau2_post=Ltau2_post,Lxi2_post=Lxi2_post,D_post=D_post,
+                Omega_post=Omega_post,thrsh_post=thrsh_post,kappa_post=kappa_post,V0_post=V0_post,LD_post=LD_post,LOmega_post=LOmega_post,
+                Lthrsh_post=Lthrsh_post,LV0_post=LV0_post)
   return(list(Y=Y,X=X,store=store,post=post))
 }
 
@@ -143,7 +167,7 @@
   for(ii in 1:p) nameslags <- c(nameslags,paste0(names,".lag",ii))
   colnames(Ylag) <- nameslags
 
-  texo <- FALSE; Mex <- 0; Exraw <- NULL
+  texo <- FALSE; Mex <- 0; Exraw <- NULL; enames <- NULL
   if(!is.null(Ex_in)){
     Exraw <- Ex_in; Mex <- ncol(Exraw); texo <- TRUE
     enames <- colnames(Exraw)
@@ -272,11 +296,12 @@
   A_store      <- array(NA,c(thindraws,bigT+1,d))
   Am_store     <- array(NA,c(thindraws,d,1))
   At_store     <- array(NA,c(thindraws,bigT+1,d))
+  res_store    <- array(NA,c(thindraws,bigT,1))
   Sv_store     <- array(NA,c(thindraws,bigT,1))
   pars_store   <- array(NA,c(thindraws,4,1))
-  tau2_store   <- array(NA,c(thindraws,d))
-  xi2_store    <- array(NA,c(thindraws,d))
   # TVP-NG
+  tau2_store   <- array(NA,c(thindraws,d,1))
+  xi2_store    <- array(NA,c(thindraws,d,1))
   lambda2_store<- array(NA,c(thindraws,p,1))
   kappa2_store <- array(NA,c(thindraws,1,1))
   a_xi_store   <- array(NA,c(thindraws,1,1))
@@ -339,8 +364,8 @@
     if(prior==1){ # TVP
       ### no hierarchical priors
     }else if(prior==2){ # TVP-NG
-      kappa2  <- rgamma(1, d1+a_xi*M^2,  d2+0.5*a_xi*mean(xi2_draw))
-      lambda2 <- rgamma(1, e1+a_tau*M^2, e2+0.5*a_tau*mean(tau2_draw))
+      kappa2  <- rgamma(1, d1+a_xi*d,  d2+0.5*a_xi*mean(xi2_draw)*d)
+      lambda2 <- rgamma(1, e1+a_tau*d, e2+0.5*a_tau*mean(tau2_draw)*d)
       for(dd in 1:d){
         xi2_draw[dd]  <- do_rgig1(lambda=a_xi-0.5,  chi=theta_draw[dd], psi=a_xi*kappa2)
         tau2_draw[dd] <- do_rgig1(lambda=a_tau-0.5, chi=(Am_draw[dd,1]-A_prior[dd,1])^2, psi=a_tau*lambda2)
@@ -349,12 +374,12 @@
       tau2_draw[tau2_draw<1e-7] <- 1e-7
       if(sample_A){
         before <- a_xi
-        a_xi   <- MH_step(a_xi, scale_xi, d*M, kappa2, theta_sqrt, b_xi, nu_xi, d1, d2)
+        a_xi   <- MH_step(a_xi, scale_xi, d, kappa2, theta_sqrt, b_xi, nu_xi, d1, d2)
         if(before!=a_xi){
           acc_xi <- acc_xi + 1
         }
         before <- a_tau
-        a_tau  <- MH_step(a_tau, scale_xi, M^2, lambda2, Am_draw, b_tau, nu_tau, e1, e2)
+        a_tau  <- MH_step(a_tau, scale_xi, d, lambda2, Am_draw, b_tau, nu_tau, e1, e2)
         if(before!=a_tau){
           acc_tau <- acc_tau + 1
         }
@@ -411,8 +436,8 @@
       Sv_store[count,,] <- Sv_draw
       pars_store[count,,] <- pars_var
       # NG
-      tau2_store[count,]<- tau2_draw
-      xi2_store[count,] <- xi2_draw
+      tau2_store[count,,]<- tau2_draw
+      xi2_store[count,,] <- xi2_draw
       lambda2_store[count,,] <- lambda2
       kappa2_store[count,,] <- kappa2
       a_xi_store[count,,] <- a_xi
@@ -423,13 +448,14 @@
   # END ESTIMATION
   #---------------------------------------------------------------------------------------------------------
   dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X))
-  ret <- list(Y=Y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
+  ret <- list(Y=y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
               tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
   return(ret)
 }
 
 #' @name .TVPBVAR_centered_R.m
 #' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom dlm dlmModReg dlmMLE dlmSmooth
 #' @importFrom MASS ginv mvrnorm
 #' @importFrom matrixcalc hadamard.prod
 #' @importFrom methods is
@@ -450,7 +476,7 @@
   for(ii in 1:p) nameslags <- c(nameslags,paste0(names,".lag",ii))
   colnames(Ylag) <- nameslags
 
-  texo <- FALSE; Mex <- 0; Exraw <- NULL
+  texo <- FALSE; Mex <- 0; Exraw <- NULL; enames <- NULL
   if(!is.null(Ex_in)){
     Exraw <- Ex_in; Mex <- ncol(Exraw); texo <- TRUE
     enames <- colnames(Exraw)
@@ -510,10 +536,10 @@
   thrsh.pct.high <- hyperpara$thres.pct.high
   TVS            <- hyperpara$TVS
   cons.mod       <- hyperpara$cons.mod
-  robust         <- hyperpara$robust
   a.approx       <- hyperpara$a.approx
   sim.kappa      <- hyperpara$sim.kappa
   kappa.grid     <- hyperpara$kappa.grid
+  MaxTrys        <- hyperpara$MaxTrys
   #---------------------------------------------------------------------------------------------------------
   # OLS Quantitites
   #---------------------------------------------------------------------------------------------------------
@@ -522,17 +548,18 @@
   A_OLS  <- XtXinv%*%(t(X)%*%y)
   E_OLS  <- y - X%*%A_OLS
   S_OLS  <- crossprod(E_OLS)/(bigT-d)
+  V_OLS  <- as.numeric(S_OLS)*XtXinv
+  sd_OLS <- sqrt(diag(V_OLS))
   #---------------------------------------------------------------------------------------------------------
   # Initial Values
   #---------------------------------------------------------------------------------------------------------
   A_draw  <- matrix(A_OLS, bigT+1, d, byrow=TRUE, dimnames=list(NULL,colnames(X)))
-  S_draw  <- matrix(S_OLS, bigT, 1)
+  S_draw  <- matrix(S_OLS, bigT,1)
 
-  # time-varying stuff
-  Am_draw    <- A_OLS
-  At_draw    <- matrix(0, bigT+1, d)
-  theta_draw <- rep(1,d)
-  theta_sqrt <- sqrt(theta_draw)
+  # state variances
+  Omega_t <- matrix(1,bigT,d)
+  # state indicator
+  D_t <- matrix(1,bigT,d)
   #---------------------------------------------------------------------------------------------------------
   # PRIORS
   #---------------------------------------------------------------------------------------------------------
@@ -542,19 +569,27 @@
   A_prior <- matrix(0,2*d, 1)
   A_prior[2*nr-1,1] <- prmean
   # prior variance
-  tau2_draw <- rep(10,d)
-  xi2_draw  <- rep(10,d)
+  sqrttheta1 <- diag(d)*0.1
+  sqrttheta2 <-diag(d)*0.01
+  kappa00 <- kappa0
+  if(kappa0<0) kappa00 <- -kappa0 * sd.OLS else kappa00 <- matrix(kappa0,d,1)
 
-  # NG stuff
-  lambda2      <- 10
-  a_tau        <- a_start
-  scale_tau    <- .43
-  acc_tau      <- 0
+  if (a.approx){
+    buildCapm <- function(u){
+      dlm::dlmModReg(X, dV = exp(u[1]), dW = exp(u[2:(d+1)]),addInt = FALSE)
+    }
+    outMLE <- dlm::dlmMLE(y, parm = rep(0,d+1), buildCapm)
+    mod <- buildCapm(outMLE$par)
+    outS <- dlm::dlmSmooth(y, mod)
+    states.OLS <- t(matrix(outS$s,bigT+1,d))
+    Achg.OLS <- t(diff(t(states.OLS)))#t(as.numeric(ALPHA0)+ALPHA2)
+  }
+  # threshold
+  thrsh <- matrix(0,d,1)
 
-  kappa2       <- 10
-  a_xi         <- a_start
-  scale_xi     <- .43
-  acc_xi       <- 0
+  # priors on initial state
+  B0prior <- matrix(0,d,1)
+  V0prior <- rep(4,d)
   #------------------------------------
   # SV quantities
   #------------------------------------
@@ -582,107 +617,111 @@
   #---------------------------------------------------------------------------------------------------------
   # STORAGES
   #---------------------------------------------------------------------------------------------------------
-  A_store      <- array(NA,c(thindraws,bigT+1,d))
-  Am_store     <- array(NA,c(thindraws,d,1))
-  At_store     <- array(NA,c(thindraws,bigT+1,d))
+  A_store      <- array(NA,c(thindraws,bigT,d))
+  res_store    <- array(NA,c(thindraws,bigT,1))
   Sv_store     <- array(NA,c(thindraws,bigT,1))
   pars_store   <- array(NA,c(thindraws,4,1))
-  tau2_store   <- array(NA,c(thindraws,d))
-  xi2_store    <- array(NA,c(thindraws,d))
-  # TVP-NG
-  lambda2_store<- array(NA,c(thindraws,p,1))
-  kappa2_store <- array(NA,c(thindraws,1,1))
-  a_xi_store   <- array(NA,c(thindraws,1,1))
-  a_tau_store  <- array(NA,c(thindraws,p,1))
+  # TTVP
+  D_store      <- array(NA,c(thindraws,bigT,d,1))
+  Omega_store  <- array(NA,c(thindraws,bigT,d,1))
+  thrsh_store  <- array(NA,c(thindraws,d,1))
+  kappa_store  <- array(NA,c(thindraws,1))
+  V0_store     <- array(NA,c(thindraws,d,1))
   #---------------------------------------------------------------------------------------------------------
   # MCMC LOOP
   #---------------------------------------------------------------------------------------------------------
   for (irep in 1:ntot){
     #----------------------------------------------------------------------------
-    # Step 0: Normalize data
-    Xt <- apply(X,2,function(x)x*exp(-0.5*Sv_draw))
-    yt <- y*exp(-0.5*Sv_draw)
-    #----------------------------------------------------------------------------
-    # Step 1: Sample coefficients
-    Zt <- cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))
-
-    Vpriorinv <- diag(1/c(tau2_draw,xi2_draw))
-    # V_post <- try(chol2inv(chol(crossprod(Zt)+Vpriorinv)),silent=TRUE)
-    # if (is(V_post,"try-error")) V_post <- ginv(crossprod(Zt)+Vpriorinv)
-    # alternative a la supplementary bitto/sfs s.3
-    Vpriorsqrt <- diag(c(sqrt(tau2_draw),sqrt(xi2_draw)))
-    V_poststar <- solve(Vpriorsqrt%*%crossprod(Zt)%*%Vpriorsqrt + diag(2*d))
-    V_post <- Vpriorsqrt%*%V_poststar%*%Vpriorsqrt
-
-    A_post <- V_post%*%(crossprod(Zt,yt)+Vpriorinv%*%A_prior)
-    alph_draw <- try(A_post+t(chol(V_post))%*%rnorm(ncol(Zt)),silent=TRUE)
-    if (is(alph_draw,"try-error")) alph_draw <- matrix(mvrnorm(1,A_post,V_post),ncol(Zt),1)
-
-    Am_draw    <- alph_draw[1:d,,drop=FALSE]
-    theta_sqrt <- alph_draw[(d+1):(2*d),,drop=TRUE]
-    theta_draw <- theta_sqrt^2
-    #----------------------------------------------------------------------------
-    # Step 2: Sample TVP-coef
-    ystar <- yt - Xt%*%Am_draw
-    Fstar <- Xt%*%diag(theta_sqrt)
-
-    At_draw <- sample_McCausland(ystar, Fstar)
-    #----------------------------------------------------------------------------
-    # Step 3: Interweaving
-    theta_sign <- sign(theta_sqrt)
-    A_draw     <- matrix(Am_draw,bigT+1,d,byrow=TRUE) + At_draw%*%diag(theta_sqrt)
-    A_diff     <- diff(At_draw%*%diag(theta_sqrt))
-    #A_diff     <- diff(A_draw) # same as line above
-    for(dd in 1:d){
-      # theta.new
-      res <- GIGrvg::rgig(1,
-                          lambda=-bigT/2,
-                          chi=sum(A_diff[,dd]^2)+(A_draw[1,dd]-Am_draw[dd,1])^2,
-                          psi=1/xi2_draw[dd])
-      theta_draw[dd] <- res
-      theta_sqrt[dd] <- sqrt(res)*theta_sign[dd]
-      # betam.new
-      sigma2_A_mean <- 1/((1/tau2_draw[dd]) + (1/theta_draw[dd]))
-      mu_A_mean     <- A_draw[1,dd]*tau2_draw[dd]/(tau2_draw[dd] + theta_draw[dd])
-      Am_draw[dd,1] <- rnorm(1, mu_A_mean, sqrt(sigma2_A_mean))
-    }
-    At_draw <- sapply(1:d,function(dd)A_draw[,dd]-Am_draw[dd,1])%*%diag(1/theta_sqrt)
-    #----------------------------------------------------------------------------
-    # Step 4: Prior choice
-    if(prior==1){ # TVP
-      ### no hierarchical priors
-    }else if(prior==2){ # TVP-NG
-      kappa2  <- rgamma(1, d1+a_xi*M^2,  d2+0.5*a_xi*mean(xi2_draw))
-      lambda2 <- rgamma(1, e1+a_tau*M^2, e2+0.5*a_tau*mean(tau2_draw))
-      for(dd in 1:d){
-        xi2_draw[dd]  <- do_rgig1(lambda=a_xi-0.5,  chi=theta_draw[dd], psi=a_xi*kappa2)
-        tau2_draw[dd] <- do_rgig1(lambda=a_tau-0.5, chi=(Am_draw[dd,1]-A_prior[dd,1])^2, psi=a_tau*lambda2)
+    # Step 1: Draw A
+    invisible(capture.output(
+        A_draw1 <- try(KF_fast(t(as.matrix(y)), X,as.matrix(exp(Sv_draw)),Omega_t,d, 1, bigT, B0prior, diag(V0prior)),silent=TRUE),
+    type="message"))
+    if (is(A_draw1,"try-error")){
+      invisible(capture.output(
+        A_draw1 <- KF(t(as.matrix(y)), X,as.matrix(exp(Sv_draw)),Omega_t,d, 1, bigT, B0prior, diag(V0prior)),
+      type="message"))
+      try0 <- 0
+      while (any(abs(A_draw1$bdraw)>1e+10) && try0<MaxTrys){ #This block resamples if the draw from the state vector is not well behaved
+        invisible(capture.output(
+          A_draw1 <- try(KF(t(as.matrix(y)), X,as.matrix(exp(Sv_draw)),Omega_t,d, 1, bigT, B0prior, diag(V0prior)),silent=TRUE),
+        type="message"))
+        try0 <- try0+1
       }
-      xi2_draw[xi2_draw<1e-7] <- 1e-7
-      tau2_draw[tau2_draw<1e-7] <- 1e-7
-      if(sample_A){
-        before <- a_xi
-        a_xi   <- MH_step(a_xi, scale_xi, d*M, kappa2, theta_sqrt, b_xi, nu_xi, d1, d2)
-        if(before!=a_xi){
-          acc_xi <- acc_xi + 1
+    }
+    A_draw <- t(A_draw1$bdraw)
+    VCOV   <- A_draw1$Vcov
+    #----------------------------------------------------------------------------
+    # Step 2: Prior choice
+    if(prior==3){
+      #------------------------------------------
+      # Step 2a: Sample variances
+      A_diff <- diff(A_draw)
+      for(dd in 1:d){
+        if(!cons.mod){
+          sig_q <- sqrttheta1[dd,dd]
+
+          si <- D_t[2:bigT,dd]
+          s_1 <- B_1 + sum(si)/2 + 0.5
+          s_2 <- B_2 + crossprod(A_diff[si==1,dd,drop=FALSE])
+          sig_q <- 1/rgamma(1,s_1,s_2)
+
+          sqrttheta1[dd,dd] <- sig_q
+          sqrttheta2[dd,dd] <- kappa00[dd,1]
+        }else{
+          sqrttheta1[dd,dd] <- sqrttheta2[dd,dd] <- 0
         }
-        before <- a_tau
-        a_tau  <- MH_step(a_tau, scale_xi, M^2, lambda2, Am_draw, b_tau, nu_tau, e1, e2)
-        if(before!=a_tau){
-          acc_tau <- acc_tau + 1
+      }
+      #------------------------------------------
+      # sample indicator
+      if(TVS){
+        #Check whether coefficient is time-varying or constant at each point in time
+        Achg <- t(A_diff)
+        Achg <- cbind(matrix(0,d,1),Achg) #we simply assume that the parameters stayed constant between t=0 and t=1
+        if(a.approx) Achg.approx <- Achg.OLS else Achg.approx <- Achg
+        grid.mat <- matrix(unlist(lapply(1:d,function(x) .get_grid(Achg[x,],sqrt(sqrttheta1[x,x]),grid.length=grid.length,thrsh.pct=thrsh.pct,thrsh.pct.high=thrsh.pct.high))),ncol = d)
+        probs    <- get_threshold(Achg, sqrttheta1, sqrttheta2,grid.mat,Achg.approx)
+        for(dd in 1:d){
+          post1 <- probs[,dd]
+          probs1 <- exp(post1-max(post1))/sum(exp(post1-max(post1)))
+          thrsh[dd,] <- sample(grid.mat[,dd],1,prob=probs1)
+          if (!a.approx){
+            D_t[,dd] <- (abs(Achg[jj,])>thrsh[dd,])*1 #change 2:T usw. here
+          }else{
+            D_t[,dd] <- (abs(Achg.OLS[dd,])>thrsh[dd,])*1 #change 2:T usw. here
+          }
         }
-        # scale MH proposal during the first 50% of the burn-in stage
-        if(irep<(0.5*burnin)){
-          if((acc_xi/irep)>0.30){scale_xi <- 1.01*scale_xi}
-          if((acc_xi/irep)<0.15){scale_xi <- 0.99*scale_xi}
-          if((acc_tau/irep)>0.30){scale_xi <- 1.01*scale_xi}
-          if((acc_tau/irep)<0.15){scale_xi <- 0.99*scale_xi}
+        if (sim.kappa){
+          grid.kappa <- kappa.grid
+          Lik.kappa <- matrix(0,length(grid.kappa),1)
+          count <- 0
+          for (grid.i in grid.kappa){
+            count <- count+1
+            sqrttheta.prop <- (grid.i*sd_OLS)^2
+            cov.prop <- sqrt(D_t*diag(sqrttheta1)+(1-D_t)*sqrttheta.prop)
+
+            Lik.kappa[count,1] <-sum(dnorm(t(Achg),matrix(0,bigT,2),cov.prop,log=TRUE))
+          }
+          Lik.kappa.norm <- exp(Lik.kappa-max(Lik.kappa))
+          probs.kappa <- Lik.kappa.norm/sum(Lik.kappa.norm)
+          kappa0 <- sample(grid.kappa,size=1, prob=probs.kappa)
+          kappa00 <- kappa0*sd_OLS
         }
+      }
+      Omega_t <- D_t%*%sqrttheta1+(1-D_t)%*%sqrttheta2
+      #------------------------------------------
+      # Step 2b: Draw variance of initial state
+      lambda2_tau <- rgamma(1,c_tau+a_tau*d,d_tau+a_tau/2*sum(V0prior)) # global component
+      # local component
+      for(dd in 1:d){
+        res <- try(do_rgig1(lambda=a_tau-0.5,
+                            chi=A_draw[dd,1]^2,
+                            psi=a_tau*lambda2_tau), silent=TRUE)
+        V0prior[dd] <- ifelse(is(res,"try-error"),next,res)
       }
     } # END PRIOR QUERY
     #----------------------------------------------------------------------------
-    # Step 5: Sample variances
-    eps <- y - cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))%*%alph_draw
+    # Step 3: Sample variances
+    eps <- y - rowSums(hadamard.prod(X,A_draw))
     if(sv){
       para <- as.list(pars_var); names(para) <- c("mu","phi","sigma","latent0")
       para$nu = Inf; para$rho=0; para$beta<-0
@@ -707,15 +746,8 @@
       sig_eta <- 1/rgamma(1,S_1,S_2)
       Sv_draw <- matrix(log(sig_eta),bigT,1)
     }
-    #-------------------------------------------------------------------------#
-    # STEP 6: RANDOM SIGN SWITCH
-    for(dd in 1:d){
-      if(runif(1,0,1)>0.5){
-        theta_sqrt[dd] <- -theta_sqrt[dd]
-      }
-    }
     #----------------------------------------------------------------------------
-    # Step 7: store draws
+    # Step 4: store draws
     if(irep %in% thin.draws){
       count <- count+1
       A_store[count,,]<- A_draw
@@ -723,21 +755,202 @@
       # SV
       Sv_store[count,,] <- Sv_draw
       pars_store[count,,] <- pars_var
-      # NG
-      tau2_store[count,]<- tau2_draw
-      xi2_store[count,] <- xi2_draw
-      lambda2_store[count,,] <- lambda2
-      kappa2_store[count,,] <- kappa2
-      a_xi_store[count,,] <- a_xi
-      a_tau_store[count,,]<- a_tau
+      # TTVP
+      D_store[count,,,] <- D_t
+      Omega_store[count,,,] <- Omega_t
+      thrsh_store[count,,] <- thrsh
+      kappa_store[count,] <- kappa0
+      V0_store[count,,] <- V0prior
     }
   }
   #---------------------------------------------------------------------------------------------------------
   # END ESTIMATION
   #---------------------------------------------------------------------------------------------------------
-  dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X))
-  ret <- list(Y=Y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
-              tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
+  dimnames(A_store)=list(NULL,paste("t",seq(1,bigT),sep="."),colnames(X))
+  ret <- list(Y=y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
+              D_store=D_store,Omega_store=Omega_store,thrsh_store=thrsh_store,kappa_store=kappa_store,V0_store=V0_store)
+  return(ret)
+}
+
+#' @name .get_grid
+#' @noRd
+.get_grid <- function(Achg,sd.state,grid.length=150,thrsh.pct=0.1,thrsh.pct.high=0.9){
+  d_prop <- seq(thrsh.pct*sd.state,thrsh.pct.high*sd.state,length.out=grid.length)
+  return(d_prop)
+}
+
+#' @name .gck
+#' @noRd
+.gck <- function(yg,gg,hh,capg,f,capf,sigv,kold,t,ex0,vx0,nvalk,kprior,kvals,p,kstate){
+  # GCK's Step 1 on page 821
+  lpy2n=0;
+  mu = matrix(0,t*kstate,1);
+  omega = matrix(0,t*kstate,kstate);
+  for (i in seq(t-1,1,by=-1)){
+    gatplus1 = sigv%*%kold[i+1]
+    ftplus1 = capf[(kstate*i+1):(kstate*(i+1)),]
+    cgtplus1 = capg[(i*p+1):((i+1)*p),]
+    htplus1 = t(hh[(i*p+1):((i+1)*p),])
+
+    htt1 <- crossprod(htplus1,gatplus1)
+    rtplus1 = tcrossprod(htt1)+tcrossprod(cgtplus1,cgtplus1)
+    rtinv = solve(rtplus1)
+    btplus1 = tcrossprod(gatplus1)%*%htplus1%*%rtinv
+    atplus1 = (diag(kstate)-tcrossprod(btplus1,htplus1))%*%ftplus1
+
+    if (kold[i+1] == 0){
+      ctplus1 = matrix(0,kstate,kstate)
+    }else{
+      cct = gatplus1%*%(diag(kstate)-crossprod(gatplus1,htplus1)%*%tcrossprod(rtinv,htplus1)%*%gatplus1)%*%t(gatplus1)
+      ctplus1 = t(chol(cct))
+    }
+    otplus1 = omega[(kstate*i+1):(kstate*(i+1)),]
+
+    dtplus1 = crossprod(ctplus1,otplus1)%*%ctplus1+diag(kstate)
+    omega[(kstate*(i-1)+1):(kstate*i),] = crossprod(atplus1,(otplus1 - otplus1%*%ctplus1%*%solve(dtplus1)%*%t(ctplus1)%*%otplus1))%*%atplus1+t(ftplus1)%*%htplus1%*%rtinv%*%t(htplus1)%*%ftplus1
+    satplus1 = (diag(kstate)-tcrossprod(btplus1,htplus1))%*%(f[,i+1]-btplus1%*%gg[,i+1]) #CHCKCHCKCHKC
+    mutplus1 = mu[(kstate*i+1):(kstate*(i+1)),]
+    mu[(kstate*(i-1)+1):(kstate*i),] = crossprod(atplus1,(diag(kstate)-otplus1%*%ctplus1%*%solve(dtplus1)%*%t(ctplus1)))%*%(mutplus1-otplus1%*%(satplus1+btplus1%*%yg[i+1]))+t(ftplus1)%*%htplus1%*%rtinv%*%(yg[i+1]-gg[,i+1]-t(htplus1)%*%f[,i+1])
+  }
+
+  # GCKs Step 2 on pages 821-822
+  kdraw = kold;
+  ht = t(hh[1:p,])
+  ft = capf[1:kstate,]
+  gat = matrix(0,kstate,kstate)
+  # Note: this specification implies no shift in first period -- sensible
+  rt = t(ht)%*%ft%*%vx0%*%t(ft)%*%ht + crossprod(ht,gat)%*%crossprod(gat,ht)+ tcrossprod(capg[1:p,])
+  rtinv = solve(rt)
+  jt = (ft%*%vx0%*%t(ft)%*%ht + tcrossprod(gat)%*%ht)%*%rtinv
+  mtm1 = (diag(kstate) - tcrossprod(jt,ht))%*%(f[,1] + ft%*%ex0) + jt%*%(yg[1] - gg[,1])
+  vtm1 <- ft%*%tcrossprod(vx0,ft)+tcrossprod(gat)-jt%*%tcrossprod(rt,jt)
+  lprob <- matrix(0,nvalk,1)
+
+  for (i in 2:t){
+    ht <-  t(hh[((i-1)*p+1):(i*p),])
+    ft <- capf[(kstate*(i-1)+1):(kstate*i),]
+    for (j in 1:nvalk){
+      gat <- kvals[j,1]%*%sigv
+      rt <- crossprod(ht,ft)%*%tcrossprod(vtm1,ft)%*%ht+crossprod(ht,gat)%*%crossprod(gat,ht)+tcrossprod(capg[((i-1)*p+1):(i*p),])
+      rtinv <- solve(rt)
+      jt <- (ft%*%tcrossprod(vtm1,ft)%*%ht+tcrossprod(gat)%*%ht)%*%rtinv
+      mt <- (diag(kstate)-tcrossprod(jt,ht))%*%(f[,i]+ft%*%mtm1)+jt%*%(yg[i]-gg[,i])
+      vt <- ft%*%tcrossprod(vtm1,ft)+tcrossprod(gat)-jt%*%tcrossprod(rt,jt)
+
+      lpyt = -.5*log(det(rt)) - .5*t(yg[i] - gg[,i] - t(ht)%*%t(f[,i] + ft%*%mtm1))%*%rtinv%*%(yg[i] - gg[,i] - t(ht)%*%(f[,i] + ft%*%mtm1))
+
+      if (det(vt)<=0){
+        tt <- matrix(0,kstate,kstate)
+      }else{
+        tt <- t(chol(vt))
+      }
+      ot = omega[(kstate*(i-1)+1):(kstate*i),]
+      mut = mu[(kstate*(i-1)+1):(kstate*i),]
+      tempv = diag(kstate) + crossprod(tt,ot)%*%tt
+      lpyt1n = -.5*log(det(tempv)) -.5*(crossprod(mt,ot)%*%mt-2*crossprod(mut,mt)-t(mut-ot%*%mt)%*%tt%*%solve(tempv)%*%t(tt)%*%(mut-ot%*%mt))
+      lprob[j,1] <- log(kprior[j,1])+lpyt1n+lpyt
+      if (i==2){
+        lpy2n <- lpyt1n+lpyt
+      }
+    }
+    pprob = exp(lprob-max(lprob))/sum(exp(lprob-max(lprob)))
+    tempv = runif(1)
+    tempu = 0
+    for (j in 1:nvalk){
+      tempu <- tempu+pprob[j,1]
+      if (tempu> tempv){
+        kdraw[i] <- kvals[j,1]
+        break
+      }
+    }
+    gat = kdraw[i]%*%sigv
+    rt = crossprod(ht,ft)%*%tcrossprod(vtm1,ft)%*%ht+t(ht)%*%tcrossprod(gat)%*%ht+tcrossprod(capg[((i-1)*p+1):(i*p)])
+    rtinv = solve(rt)
+    jt = (ft%*%tcrossprod(vtm1,ft)%*%ht+tcrossprod(gat)%*%ht)%*%rtinv
+    mtm1 <- (diag(kstate)-tcrossprod(jt,ht))%*%(f[,i]+ft%*%mtm1)+jt%*%(yg[i]-gg[,i])
+    vtm1 = ft%*%tcrossprod(vtm1,ft)+tcrossprod(gat)-jt%*%tcrossprod(rt,jt)
+  }
+  return(kdraw)
+}
+
+#' @name .var_posterior
+#' @importFrom MASS ginv
+#' @importFrom abind adrop
+#' @noRd
+.var_posterior <- function(post_draws, prior, draws, applyfun, cores){
+  M <- length(post_draws)
+  bigT <- nrow(post_draws[[1]]$Y)
+  bigK <- ncol(post_draws[[1]]$X)
+  K    <- unlist(lapply(post_draws,function(l)ncol(l$X)))
+  # bind data
+  Y <- do.call("cbind",lapply(1:M,function(mm)post_draws[[mm]]$Y))
+  X <- post_draws[[1]]$X
+  # general stuff
+  res_store  <- abind(lapply(1:M,function(mm)post_draws[[mm]]$res_store),along=3)
+  Sv_store   <- abind(lapply(1:M,function(mm)post_draws[[mm]]$Sv_store),along=3)
+  pars_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$pars_store),along=3)
+  # container
+  A_store        <- array(NA,c(draws,bigT,bigK,M))
+  L_store        <- array(NA,c(draws,bigT,M,M))
+  S_store        <- array(NA,c(draws,bigT,M,M))
+  timepoints     <- paste("t",seq(1,bigT),sep=".")
+  store.obj <- applyfun(1:draws,function(irep){
+    At_store <- array(NA,c(bigT,bigK,M))
+    Lt_store <- array(NA,c(bigT,M,M))
+    St_store <- array(NA,c(bigT,M,M))
+    for(tt in 1:bigT){
+      A0 <- diag(M)
+      for(mm in 2:M){
+        A0[mm,1:(mm-1)] <- -post_draws[[mm]]$A_store[irep,timepoints[tt],1:(mm-1)]
+      }
+      A0inv <- try(solve(A0),silent=TRUE)
+      if(is(A0inv,"try-error")) A0inv <- ginv(A0)
+      Lt_store[tt,,] <- A0inv
+      St_store[tt,,] <- A0inv%*%diag(exp(Sv_store[irep,tt,]))%*%t(A0inv)
+      Atilde <- NULL
+      for(mm in 1:M) Atilde <- cbind(Atilde,post_draws[[mm]]$A_store[irep,timepoints[tt],mm:K[mm]])
+      At_store[tt,,] <- t(A0inv%*%t(Atilde))
+    }
+    return(list(At_store=At_store,Lt_store=Lt_store,St_store=St_store))
+  })
+  for(irep in 1:draws){
+    A_store[irep,,,] <- store.obj[[irep]]$At_store
+    L_store[irep,,,] <- store.obj[[irep]]$Lt_store
+    S_store[irep,,,] <- store.obj[[irep]]$St_store
+  }
+  dimnames(A_store) <- list(NULL,timepoints,colnames(X),colnames(Y))
+  Smed_store <- apply(S_store,c(1,3,4),median)
+  if(prior=="TVP"){
+    tau2_store<-xi2_store<-Ltau2_store<-Lxi2_store<-lambda2_store<-kappa2_store<-a_xi_store<-a_tau_store<-D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
+  }else if(prior=="TVP-NG"){
+    D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
+    # general stuff
+    lambda2_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$lambda2_store),along=3)
+    kappa2_store  <- abind(lapply(1:M,function(mm)post_draws[[mm]]$kappa2_store),along=3)
+    a_xi_store    <- abind(lapply(1:M,function(mm)post_draws[[mm]]$a_xi_store),along=3)
+    a_tau_store   <- abind(lapply(1:M,function(mm)post_draws[[mm]]$a_tau_store),along=3)
+    tau2_store    <- abind(lapply(1:M,function(mm)post_draws[[mm]]$tau2_store[,mm:K[mm],]),along=3)
+    xi2_store     <- abind(lapply(1:M,function(mm)post_draws[[mm]]$xi2_store[,mm:K[mm],]),along=3)
+    ## ATTENTION: variances of L just as list !!
+    Ltau2_store   <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$tau2_store[,1:(mm-1),,drop=FALSE],drop=3))
+    Lxi2_store    <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$xi2_store[,1:(mm-1),,drop=FALSE],drop=3))
+  }else if(prior=="TTVP"){
+    tau2_store<-xi2_store<-Ltau2_store<-Lxi2_store<-lambda2_store<-kappa2_store<-a_xi_store<-a_tau_store<-NULL
+    # general stuff
+    kappa_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$kappa_store),along=3)
+    D_store     <- abind(lapply(1:M,function(mm)post_draws[[mm]]$D_store[,,mm:K[mm],]),along=4)
+    Omega_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$Omega_store[,,mm:K[mm],]),along=4)
+    thrsh_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$thrsh_store[,mm:K[mm],]),along=3)
+    V0_store    <- abind(lapply(1:M,function(mm)post_draws[[mm]]$V0_store[,mm:K[mm],]),along=3)
+    ## ATTENTION: variances of L just as list !!
+    LD_store    <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$D_store[,,1:(mm-1),,drop=FALSE],drop=4))
+    LOmega_store<- lapply(2:M,function(mm)adrop(post_draws[[mm]]$Omega_store[,,1:(mm-1),,drop=FALSE],drop=4))
+    Lthrsh_store<- lapply(2:M,function(mm)adrop(post_draws[[mm]]$thrsh_store[,1:(mm-1),,drop=FALSE],drop=3))
+    LV0_store   <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$V0_store[,1:(mm-1),,drop=FALSE],drop=3))
+  }
+  ret <- list(Y=Y,X=X,A_store=A_store,L_store=L_store,Sv_store=Sv_store,S_store=S_store,Smed_store=Smed_store,pars_store=pars_store,res_store=res_store,
+              tau2_store=tau2_store,xi2_store=xi2_store,Ltau2_store=Ltau2_store,Lxi2_store=Lxi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store,
+              D_store=D_store,Omega_store=Omega_store,thrsh_store=thrsh_store,kappa_store=kappa_store,V0_store=V0_store,LD_store=LD_store,LOmega_store=LOmega_store,Lthrsh_store=Lthrsh_store,LV0_store=LV0_store)
   return(ret)
 }
 
