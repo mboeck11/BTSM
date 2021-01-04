@@ -5,9 +5,7 @@
 .BIVAR_linear_wrapper <- function(Yraw, Draw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex, applyfun, cores, eigen, trim){
   class(Yraw) <- class(Draw) <- "numeric"
   prior_in <- ifelse(prior=="MN",1,ifelse(prior=="SSVS",2,3))
-  if(default_hyperpara[["a_log"]]){
-    default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
-  }
+  if(default_hyperpara[["a_log"]]) default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   bivar<-.BIVAR_linear_R(Y_in=Yraw,D_in=Draw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   #------------------------------------------------ get data ----------------------------------------#
   Y <- bivar$Y; colnames(Y) <- colnames(Yraw); X <- bivar$X; D <- bivar$D; colnames(D) <- colnames(Draw)

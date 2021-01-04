@@ -187,7 +187,7 @@ bivar<-function(Data,Idata,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,
   args$Y <- globalpost$Y
   args$X <- globalpost$X
   args$D <- globalpost$D
-  args$thindraws <- ifelse(eigen,sum(globalpost$store$A.eigen<trim),draws)
+  args$thindraws <- ifelse(eigen,sum(globalpost$store$A.eigen<trim),args$thindraws)
   if(verbose) cat(paste0("\nModel yields ", args$thindraws," stable draws."))
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,

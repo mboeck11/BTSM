@@ -29,7 +29,7 @@ This package focuses on multivariate time series models estimated in a Bayesian 
 | Bayesian Interacted Vector Autoregression             | `bivar()`   | yes  | no          | no   | no  |
 | Bayesian Panel Vector Autoregressions                 | `bpvar()`   | no   | no          | no   | no  |
 | Bayesian Interacted Panel Vector Autoregression       | no          | no   | no          | no   | no  |
-| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | no   | no          | no   | no  |
+| Time-varying Parameter Bayesian Vector Autoregression | `tvpbvar()` | yes  | yes         | no   | no  |
 
 We also provide S3methods for each function as summarized in the next table
 

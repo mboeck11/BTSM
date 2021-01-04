@@ -3,113 +3,185 @@
 #' @param object an object of class \code{bvar}.
 #' @param ... additional arguments.
 #' @param n.ahead the forecast horizon.
+#' @param quantiles posterior quantiles to be computed.
+#' @param applyfun parallelization
+#' @param cores number of cores
 #' @param save.store If set to \code{TRUE} the full distribution is returned. Default is set to \code{FALSE} in order to save storage.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @importFrom stats rnorm tsp sd
 #' @importFrom utils setTxtProgressBar txtProgressBar
 #' @export
-predict.bvar <- function(object, ..., n.ahead=1, save.store=FALSE, verbose=TRUE){
+"predict" <- function(object, ..., n.ahead=24, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
+  #------------------------------ message to console -------------------------------------------------------#
+  if(verbose){
+    if(class(object)=="bvar")
+      cat("\nStart doing predictions of Bayesian Vector Autoregression.\n\n")
+    if(class(object)=="bvec")
+      cat("\nStart doing predictions of Bayesian Vector Error Correction Model.\n\n")
+    if(class(object)=="bivar")
+      cat("\nStart doing predictions of Bayesian Interacted Vector Autoregression.\n\n")
+    if(class(object)=="tvpbvar")
+      cat("\nStart doing predictions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
+  }
+  UseMethod("predict", x)
+}
+
+#' @export
+predict.bvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
   start.pred <- Sys.time()
   if(verbose) cat("\nStart computing predictions of Bayesian Vector Autoregression.\n\n")
-  draws      <- object$args$thindraws
+  if(verbose) cat("Start computing...\n")
+  out <- predict.generator(object=object, n.ahead=n.ahead, quantiles=quantiles, applyfun=applyfun, cores=cores, save.store=save.store, TVP=FALSE)
+  if(verbose) cat(paste("\n\nSize of object:", format(object.size(out),unit="MB")))
+  end.pred <- Sys.time()
+  diff.pred <- difftime(end.pred,start.pred,units="mins")
+  mins.pred <- round(diff.pred,0); secs.pred <- round((diff.pred-floor(diff.pred))*60,0)
+  if(verbose) cat(paste("\nNeeded time for computation: ",mins.pred," ",ifelse(mins.pred==1,"min","mins")," ",secs.pred, " ",ifelse(secs.pred==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @export
+predict.tvpbvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
+  start.pred <- Sys.time()
+  if(verbose) cat("\nStart computing predictions of Time-varying parameter Bayesian Vector Autoregression.\n\n")
+  if(verbose) cat("Start computing...\n")
+  out <- predict.generator(object=object, n.ahead=n.ahead, quantiles=quantiles, applyfun=applyfun, cores=cores, save.store=save.store, TVP=TRUE)
+  if(verbose) cat(paste("\n\nSize of object:", format(object.size(out),unit="MB")))
+  end.pred <- Sys.time()
+  diff.pred <- difftime(end.pred,start.pred,units="mins")
+  mins.pred <- round(diff.pred,0); secs.pred <- round((diff.pred-floor(diff.pred))*60,0)
+  if(verbose) cat(paste("\nNeeded time for computation: ",mins.pred," ",ifelse(mins.pred==1,"min","mins")," ",secs.pred, " ",ifelse(secs.pred==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @name .predict.generator
+#' @noRd
+predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, TVP=FALSE){
+  thindraws  <- object$args$thindraws
   plag       <- object$args$plag
+  prior      <- object$args$prior
   xglobal    <- object$xglobal
   x          <- xglobal[(plag+1):nrow(xglobal),]
-  S_large    <- object$store$S_store
-  A_large    <- object$store$A_store
+  S_store    <- object$store$S_store
+  A_store    <- object$store$A_store
+  pars_store <- object$store$pars_store
+  vola_store <- object$store$vola_store
+  L_store    <- object$store$L_store
+  thetasqrt_store<-object$store$thetasqrt_store
+  Lthetasqrt_store<-object$store$Lthetasqrt_store
+  Omega_store<-object$store$Omega_store
+  LDOmega_store<-object$store$LOmega_store
   varNames   <- colnames(xglobal)
   Traw       <- nrow(xglobal)
   bigT       <- nrow(x)
   M          <- ncol(xglobal)
+  h          <- object$args$h
   cons       <- ifelse(object$args$cons,1,0)
   trend      <- ifelse(object$args$trend,1,0)
-
-  Yn <- xglobal
-  Xn <- .mlag(Yn,plag)
-  Xn <- Xn[(plag+1):Traw,,drop=FALSE]
-  Yn <- Yn[(plag+1):Traw,,drop=FALSE]
-  if(cons)  Xn <- cbind(Xn,1)
-  if(trend) Xn <- cbind(Xn,seq(1,bigT))
-
-  fcst_t <- array(NA,dim=c(draws,M,n.ahead))
-
+  K          <- M*plag+cons+trend
+  SV         <- object$args$SV
+  #------------------------------ prepare applyfun --------------------------------------------------------#
+  if(is.null(applyfun)) {
+    applyfun <- if(is.null(cores)) {
+      lapply
+    } else {
+      if(.Platform$OS.type == "windows") {
+        cl_cores <- parallel::makeCluster(cores)
+        on.exit(parallel::stopCluster(cl_cores))
+        function(X, FUN, ...) parallel::parLapply(cl = cl_cores, X, FUN, ...)
+      } else {
+        function(X, FUN, ...) parallel::mclapply(X, FUN, ..., mc.cores =
+                                                   cores)
+      }
+    }
+  }
+  if(is.null(cores)) {cores <- 1}
+  #------------------------------ looping --------------------------------------------------------#
   # start loop here
-  if(verbose) cat("Start computing...\n")
-  if(verbose) pb <- txtProgressBar(min = 0, max = draws, style = 3)
-  for(irep in 1:draws){
-    #Step I: Construct a global VC matrix Omega_t
-    Sig_t   <- S_large[irep,bigT,,]
-    zt      <- Xn[bigT,]
-    z1      <- zt
-    Mean00  <- zt
+  pred_store <- array(NA, dim=c(thindraws,M,n.ahead), dimnames=list(NULL,varNames,1:n.ahead))
+  pred.obj <- applyfun(1:thindraws,function(irep){
+    #Step I: get coefficients and varianes
+    if(TVP){
+      A_t <- A_store[irep,bigT,,]
+      if(prior=="TVP" || prior == "TVP-NG") Q_t <- as.vector(thetasqrt_store[irep,,]^2)
+      if(prior=="TTVP") Q_t <- as.vector(Omega_store[irep,bigT,,])
+      L_t <- L_store[irep,bigT,,]
+      if(prior=="TVP" || prior == "TVP-NG") LQ_t <- lapply(Lthetasqrt_store,function(l)l[irep,]^2)
+      if(prior=="TTVP") LQ_t <- lapply(LDOmega_store,function(l)l[irep,bigT,])
+    } else {
+      A_t <- A_store[irep,,]
+      L_t <- L_store[irep,,]
+    }
+    Htt <- vola_store[irep,bigT,]
+    if(SV){
+      pars_var <- pars_store[irep,,]
+    }
+    # Step II: get last data point
+    Mean00  <- xglobal[bigT,]
     Sigma00 <- matrix(0,M*plag,M*plag)
     y2      <- NULL
-
     #gets companion form
-    aux   <- .gen_compMat(A_large[irep,,],M,plag)
+    aux   <- .gen_compMat(A_t,M,plag)
     Mm    <- aux$Cm
     Jm    <- aux$Jm
+    Sig_t <- L_t %*% diag(exp(Htt)) %*% t(L_t)
     Jsigt <- Jm%*%Sig_t%*%t(Jm)
     # this is the forecast loop
     for (ih in 1:n.ahead){
-      z1      <- Mm%*%z1
+      Mean00  <- Mm%*%Mean00
+      if(cons)  Mean00 <- Mean00 + t(A_t["cons",,drop=FALSE])
+      if(trend) Mean00 <- Mean00 + t(A_t["trend"])*(bigT+ih-1)
       Sigma00 <- Mm%*%Sigma00%*%t(Mm) + Jsigt
       chol_varyt <- try(t(chol(Sigma00[1:M,1:M])),silent=TRUE)
       if(is(chol_varyt,"try-error")){
-        yf <- mvrnorm(1,mu=z1[1:M],Sigma00[1:M,1:M])
+        yf <- mvrnorm(1,mu=Mean00[1:M],Sigma00[1:M,1:M])
       }else{
-        yf <- z1[1:M]+chol_varyt%*%rnorm(M,0,1)
+        yf <- Mean00[1:M]+chol_varyt%*%rnorm(M,0,1)
+      }
+      if(TVP){
+        A_t <- matrix(rnorm(K*M,as.vector(A_t),Q_t),K,M, dimnames=dimnames(A_t))
+        for(mm in 2:M) L_t[mm,1:(mm-1)] <- rnorm(mm-1,L_t[mm,1:(mm-1)],LQ_t[[mm-1]])
+      }
+      if(SV){
+        Htt   <- pars_var["mu",]+pars_var["phi",]*(Htt-pars_var["mu",])+rnorm(M,0,sqrt(pars_var["sigma",]))
+        Jsigt <- L_t %*% diag(exp(Htt))%*%t(L_t)
       }
       y2 <- cbind(y2,yf)
     }
-
-    fcst_t[irep,,] <- y2
-    if(verbose) setTxtProgressBar(pb, irep)
+    return(y2)
+  })
+  for(irep in 1:thindraws){
+    pred_store[irep,,] <- pred.obj[[irep]]
   }
+  pred_post <- apply(pred_store,c(2,3),quantile,quantiles)
+  dimnames(pred_post)<-list(paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep="."),varNames,1:n.ahead)
 
-  imp_posterior<-array(NA,dim=c(M,n.ahead,7))
-  dimnames(imp_posterior)[[1]] <- varNames
-  dimnames(imp_posterior)[[2]] <- 1:n.ahead
-  dimnames(imp_posterior)[[3]] <- c("low10","low16","low25","median","high75","high84","high90")
-
-  imp_posterior[,,"low10"]  <- apply(fcst_t,c(2,3),quantile,0.10,na.rm=TRUE)
-  imp_posterior[,,"low16"]  <- apply(fcst_t,c(2,3),quantile,0.16,na.rm=TRUE)
-  imp_posterior[,,"low25"]  <- apply(fcst_t,c(2,3),quantile,0.25,na.rm=TRUE)
-  imp_posterior[,,"median"] <- apply(fcst_t,c(2,3),quantile,0.50,na.rm=TRUE)
-  imp_posterior[,,"high75"] <- apply(fcst_t,c(2,3),quantile,0.75,na.rm=TRUE)
-  imp_posterior[,,"high84"] <- apply(fcst_t,c(2,3),quantile,0.84,na.rm=TRUE)
-  imp_posterior[,,"high90"] <- apply(fcst_t,c(2,3),quantile,0.90,na.rm=TRUE)
-
-  h                        <- object$args$h
-  if(h>n.ahead) h          <- n.ahead
-  yfull                    <- object$args$yfull
+  if(h>n.ahead) {
+    h <- n.ahead
+    warning("Argument 'h' bigger than 'n.ahead'. Evaluation of forecasts only 'n.ahead' periods, hence 'h' is set to 'n.ahead'.")
+  }
+  yfull <- object$args$yfull
   if(h>0){
     lps.stats                <- array(0,dim=c(M,2,h))
     dimnames(lps.stats)[[1]] <- colnames(xglobal)
     dimnames(lps.stats)[[2]] <- c("mean","sd")
     dimnames(lps.stats)[[3]] <- 1:h
-    lps.stats[,"mean",]      <- apply(fcst_t[,,1:h],c(2:3),mean)
-    lps.stats[,"sd",]        <- apply(fcst_t[,,1:h],c(2:3),sd)
+    lps.stats[,"mean",]      <- apply(pred_store[,,1:h],c(2:3),mean)
+    lps.stats[,"sd",]        <- apply(pred_store[,,1:h],c(2:3),sd)
     hold.out<-yfull[(nrow(yfull)+1-h):nrow(yfull),,drop=FALSE]
   }else{
     lps.stats<-NULL
     hold.out<-NULL
   }
-
-  out <- structure(list(fcast=imp_posterior,
+  out <- structure(list(fcast=pred_post,
                         xglobal=xglobal,
                         n.ahead=n.ahead,
                         lps.stats=lps.stats,
                         hold.out=hold.out),
                    class="bvar.pred")
   if(save.store){
-    out$pred_store = fcst_t
+    out$pred_store = pred_store
   }
-  if(verbose) cat(paste("\n\nSize of object:", format(object.size(out),unit="MB")))
-  end.pred <- Sys.time()
-  diff.pred <- difftime(end.pred,start.pred,units="mins")
-  mins.pred <- round(diff.pred,0); secs.pred <- round((diff.pred-floor(diff.pred))*60,0)
-  if(verbose) cat(paste("\nNeeded time for computation: ",mins.pred," ",ifelse(mins.pred==1,"min","mins")," ",secs.pred, " ",ifelse(secs.pred==1,"second.","seconds.\n"),sep=""))
   return(out)
 }
 

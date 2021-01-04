@@ -112,7 +112,7 @@ tvpbvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE,
   }
   Yraw <- Yraw[(plag+1):(len+plag),,drop=FALSE]
   #-----------------------------------------------------------------------------------------
-  temp <- .gen_compMat(A.true, M, plag)
+  temp <- .gen_compMat(apply(At.true,c(2,3),median), M, plag)
   Jm   <- temp$Jm
   Cm   <- temp$Cm
 
@@ -123,7 +123,7 @@ tvpbvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE,
 
   nhor    <- 60
   impresp <- array(0, c(M, M, nhor))
-  impresp[,,1]  <- t(shock)
+  impresp[,,1]  <- shock
   compMati <- Cm
   for(j in 2:nhor) {
     temp <- t(Jm) %*% compMati %*% Jm %*% shock

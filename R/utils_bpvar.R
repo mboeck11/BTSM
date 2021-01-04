@@ -4,9 +4,7 @@
 #' @importFrom utils capture.output
 .BPVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex, applyfun, cores){
   prior_in <- ifelse(prior=="NG",3,NA)
-  if(default_hyperpara[["a_log"]]){
-    default_hyperpara["a_start"] <- 1/log(ncol(Yraw[[1]]))
-  }
+  if(default_hyperpara[["a_log"]]) default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   Y_in=Yraw
   p_in=plag
   draws_in=draws

@@ -35,6 +35,8 @@
       cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
     if(class(x)=="bivar")
       cat("\nStart computing impulse response functions of Bayesian Interacted Vector Autoregression.\n\n")
+    if(class(x)=="tvpbvar")
+      cat("\nStart computing impulse response functions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
   }
   #------------------------------ do checks ---------------------------------------------------------------#
   .irf.checks(x=x, n.ahead=n.ahead, ident=ident, scal=scal, sign.constr=sign.constr, proxy=proxy)
@@ -62,6 +64,53 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
       cat("Identification schem: Identification via proxy variable.\n")
   }
   out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
+  end.irf <- Sys.time()
+  diff.irf <- difftime(end.irf,start.irf,units="mins")
+  mins.irf <- round(diff.irf,0); secs.irf <- round((diff.irf-floor(diff.irf))*60,0)
+  cat(paste("\nNeeded time for impulse response analysis: ",mins.irf," ",ifelse(mins.irf==1,"min","mins")," ",secs.irf, " ",ifelse(secs.irf==1,"second.","seconds.\n"),sep=""))
+  return(out)
+}
+
+#' @export
+irf.tvpbvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+                        quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
+  start.irf <- Sys.time()
+  if(ident=="chol-shortrun"){
+    if(verbose)
+      cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
+  }else if(ident=="chol-longrun"){
+    if(verbose)
+      cat("Identification schem: Long-run identification via Cholesky decomposition.\n")
+  }else if(ident=="girf"){
+    if(verbose)
+      cat("Identification scheme: Generalized impulse responses.\n")
+  }else if(ident=="sign"){
+    if(verbose)
+      cat("Identification scheme: identification via sign-restrictions.\n")
+  }else if(ident=="proxy"){
+    if(verbose)
+      cat("Identification schem: Identification via proxy variable.\n")
+  }
+  #------------ get data -------------------------#
+  Y    <- x$args$Y
+  bigT <- nrow(Y)
+  M    <- ncol(Y)
+  thindraws <- x$args$thindraws
+  #-------------------------------------------------------------------------------------------------------#
+  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
+  # median response
+  x.med <- x
+  x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
+  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=FALSE)
+  out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
+  for(tt in 1:bigT){
+    x.t <- x
+    x.t$store$A_store <- x.t$store$A_store[,tt,,]
+    x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
+    out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=FALSE)$posterior
+  }
+  ## bind together somehow
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")

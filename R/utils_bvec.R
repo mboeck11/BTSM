@@ -5,9 +5,7 @@
 .BVEC_linear_wrapper <- function(Yraw, r, beta, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex){
   class(Yraw) <- "numeric"
   prior_in <- ifelse(prior=="MN",1,ifelse(prior=="SSVS",2,ifelse(prior=="NG",3,NA)))
-  if(default_hyperpara[["a_log"]]){
-    default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
-  }
+  if(default_hyperpara[["a_log"]]) default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
   if(!is.na(prior_in)){
     bvec<-.BVEC_linear_R(Y_in=Yraw,r_in=r,beta_in=beta,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   }

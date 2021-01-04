@@ -2,22 +2,10 @@
 #' @noRd
 #' @importFrom abind adrop
 #' @importFrom utils capture.output
-.TVPBVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex, applyfun, cores){
+.TVPBVAR_linear_wrapper <- function(Yraw, prior, plag, draws, burnin, cons, trend, SV, thin, default_hyperpara, Ex, applyfun, cores, eigen, trim){
   class(Yraw) <- "numeric"
   prior_in <- prior
   if(default_hyperpara[["a_log"]]) default_hyperpara["a_start"] <- 1/log(ncol(Yraw))
-  # nr <- 1
-  # Y_in=Yraw
-  # p_in=plag
-  # draws_in=draws
-  # burnin_in=burnin
-  # cons_in=cons
-  # trend_in=trend
-  # sv_in=SV
-  # thin_in=thin
-  # prior_in=prior_in
-  # hyperparam_in=default_hyperpara
-  # Ex_in=Ex
   if(prior=="TVP" || prior=="TVP-NG"){
     prior_in <- ifelse(prior=="TVP",1,2)
     post_draws <- applyfun(1:ncol(Yraw), function(nr){
@@ -31,7 +19,6 @@
     })
     tvpbvar <- .var_posterior(post_draws, prior, draws/thin, applyfun, cores)
   }
-  #tvpbvar<-.TVPBVAR_linear_R(Y_in=Yraw,p_in=plag,draws_in=draws,burnin_in=burnin,cons_in=cons,trend_in=trend,sv_in=SV,thin_in=thin,prior_in=prior_in,hyperparam_in=default_hyperpara,Ex_in=Ex)
   #------------------------------------------------ get data ----------------------------------------#
   Y <- tvpbvar$Y; colnames(Y) <- colnames(Yraw); X <- tvpbvar$X
   M <- ncol(Y); bigT <- nrow(Y); K <- ncol(X)
@@ -61,24 +48,30 @@
   S_store <- tvpbvar$S_store
   Smed_store <- tvpbvar$Smed_store
   vola_store <- tvpbvar$Sv_store; dimnames(vola_store) <- list(NULL,NULL,colnames(Y))
-  if(SV) pars_store <- tvpbvar$pars_store else pars_store <- NULL
+  if(SV){
+    pars_store <- tvpbvar$pars_store; dimnames(pars_store) <- list(NULL,c("mu","phi","sigma","latent0"),colnames(Y))
+  }else pars_store <- NULL
   res_store <- tvpbvar$res_store; dimnames(res_store) <- list(NULL,NULL,colnames(Y))
   # NG
   if(prior=="TVP"){
+    thetasqrt_store<- tvpbvar$thetasqrt_store
+    Lthetasqrt_store<-tvpbvar$Lthetasqrt_store
     tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store <- NULL
     D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store <- NULL
   }else if(prior=="TVP-NG"){
     D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
+    thetasqrt_store<- tvpbvar$thetasqrt_store
     tau2_store    <- tvpbvar$tau2_store
     xi2_store     <- tvpbvar$xi2_store
     lambda2_store <- tvpbvar$lambda2_store
     kappa2_store  <- tvpbvar$kappa2_store
     a_tau_store   <- tvpbvar$a_tau_store
     a_xi_store    <- tvpbvar$a_xi_store
+    Lthetasqrt_store<-tvpbvar$Lthetasqrt_store
     Ltau2_store   <- tvpbvar$Ltau2_store
     Lxi2_store    <- tvpbvar$Lxi2_store
   }else if(prior=="TTVP"){
-    tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store<-NULL
+    thetasqrt_store<-Lthetasqrt_store<-tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store<-NULL
     D_store       <- tvpbvar$D_store
     Omega_store   <- tvpbvar$Omega_store
     thrsh_store   <- tvpbvar$thrsh_store
@@ -89,11 +82,56 @@
     Lthrsh_store  <- tvpbvar$Lthrsh_store
     LV0_store     <- tvpbvar$LV0_store
   }
-  store <- list(A_store=A_store,a0_store=a0_store,a1_store=a1_store,Phi_store=Phi_store,Ex_store=Ex_store,S_store=S_store,Smed_store=Smed_store,L_store=L_store,
-                vola_store=vola_store,pars_store=pars_store,res_store=res_store,tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,
+  if(eigen){
+    # check medians: could be done more carefully
+    A.eigen <- unlist(applyfun(1:args$thindraws,function(irep){
+      Cm <- .gen_compMat(apply(A_store[irep,,,],c(2,3),median),ncol(Yraw),plag)$Cm
+      return(max(abs(Re(eigen(Cm)$values))))
+    }))
+    trim_eigen <- which(A.eigen<trim)
+    A_store<-A_store[trim_eigen,,,,drop=FALSE]
+    if(cons) a0_store <- a0_store[trim_eigen,,,drop=FALSE]
+    if(trend) a1_store <- a1_store[trim_eigen,,,drop=FALSE]
+    if(!is.null(Ex)) Ex_store <- Ex_store[trim_eigen,,,,drop=FALSE]
+    Phi_store<-lapply(Phi_store,function(l)l[trim_eigen,,,,drop=FALSE])
+    L_store<-L_store[trim_eigen,,,,drop=FALSE]
+    S_store<-S_store[trim_eigen,,,,drop=FALSE]
+    Smed_store<-Smed_store[trim_eigen,,,drop=FALSE]
+    vola_store<-vola_store[trim_eigen,,,drop=FALSE]
+    if(SV) pars_store<-pars_store[trim_eigen,,,drop=FALSE]
+    res_store<-res_store[trim_eigen,,,drop=FALSE]
+    if(prior=="TVP"){
+      thetasqrt_store<-thetasqrt_store[trim_eigen,,,drop=FALSE]
+      Lthetasqrt_store<-lapply(Lthetasqrt_store,function(l)l[trim_eigen,,drop=FALSE])
+    }
+    if(prior=="TVP-NG"){
+      thetasqrt_store<-thetasqrt_store[trim_eigen,,,drop=FALSE]
+      tau2_store<-tau2_store[trim_eigen,,,drop=FALSE]
+      xi2_store<-xi2_store[trim_eigen,,,drop=FALSE]
+      lambda2_store<-lambda2_store[trim_eigen,,,drop=FALSE]
+      kappa2_store<-kappa2_store[trim_eigen,,,drop=FALSE]
+      a_tau_store<-a_tau_store[trim_eigen,,,drop=FALSE]
+      a_xi_store<-a_xi_store[trim_eigen,,,drop=FALSE]
+      Lthetasqrt_store<-lapply(Lthetasqrt_store,function(l)l[trim_eigen,,drop=FALSE])
+      Ltau2_store<-lapply(Ltau2_store,function(l)l[trim_eigen,,drop=FALSE])
+      Lxi2_store<-lapply(Lxi2_store,function(l)l[trim_eigen,,drop=FALSE])
+    }else if(prior=="TTVP"){
+      D_store<-D_store[trim_eigen,,,,drop=FALSE]
+      Omega_store<-Omega_store[trim_eigen,,,,drop=FALSE]
+      thrsh_store<-thrsh_store[trim_eigen,,,drop=FALSE]
+      kappa_store<-kappa_store[trim_eigen,,,drop=FALSE]
+      V0_store<-V0_store[trim_eigen,,,drop=FALSE]
+      LD_store<-lapply(LD_store,function(l)l[trim_eigen,,,drop=FALSE])
+      LOmega_store<-lapply(LOmega_store,function(l)l[trim_eigen,,,drop=FALSE])
+      Lthrsh_store<-lapply(Lthrsh_store,function(l)l[trim_eigen,,drop=FALSE])
+      LV0_store<-lapply(LV0_store,function(l)l[trim_eigen,,drop=FALSE])
+    }
+  }else{A.eigen<-NULL}
+  store <- list(A_store=A_store,a0_store=a0_store,a1_store=a1_store,Phi_store=Phi_store,Ex_store=Ex_store,S_store=S_store,Smed_store=Smed_store,L_store=L_store,Lthetasqrt_store=Lthetasqrt_store,
+                vola_store=vola_store,pars_store=pars_store,res_store=res_store,thetasqrt_store=thetasqrt_store,tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,
                 kappa2_store=kappa2_store,a_tau_store=a_tau_store,a_xi_store=a_xi_store,Ltau2_store=Ltau2_store,Lxi2_store=Lxi2_store,D_store=D_store,
                 Omega_store=Omega_store,thrsh_store=thrsh_store,kappa_store=kappa_store,V0_store=V0_store,LD_store=LD_store,LOmega_store=LOmega_store,
-                Lthrsh_store=Lthrsh_store,LV0_store=LV0_store)
+                Lthrsh_store=Lthrsh_store,LV0_store=LV0_store,A.eigen=A.eigen)
   #------------------------------------ compute posteriors -------------------------------------------#
   A_post      <- apply(A_store,c(2,3,4),median)
   L_post      <- apply(L_store,c(2,3,4),median)
@@ -111,22 +149,28 @@
     Phi_post[[jj]]    <- A_post[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
   }
   vola_post <- apply(vola_store,c(2,3),median)
-  if(SV) pars_post <- apply(pars_store,c(2,3),median) else pars_post <- NULL
+  if(SV){
+    pars_post <- apply(pars_store,c(2,3),median); dimnames(pars_post) <- list(c("mu","phi","sigma","latent0"),colnames(Y))
+  }else pars_post <- NULL
   if(prior=="TVP"){
+    thetasqrt_post<-apply(thetasqrt_store,c(2,3),median)
+    Lthetasqrt_post<-lapply(Lthetasqrt_store,function(l)apply(l,2,median))
     tau2_post<-xi2_post<-lambda2_post<-kappa2_post<-a_tau_post<-a_xi_post<-Ltau2_post<-Lxi2_post<-NULL
     D_post<-Omega_post<-thrsh_post<-kappa_post<-V0_post<-LD_post<-LOmega_post<-Lthrsh_post<-LV0_post<-NULL
   }else if(prior=="TVP-NG"){
     D_post<-Omega_post<-thrsh_post<-kappa_post<-V0_post<-LD_post<-LOmega_post<-Lthrsh_post<-LV0_post<-NULL
+    thetasqrt_post<-apply(thetasqrt_store,c(2,3),median)
     tau2_post <- apply(tau2_store,c(2,3),median)
     xi2_post  <- apply(xi2_store,c(2,3),median)
     lambda2_post <- apply(lambda2_store,c(2,3),median)
     kappa2_post <- apply(kappa2_store,c(2,3),median)
     a_tau_post <- apply(a_tau_store,c(2,3),median)
     a_xi_post <- apply(a_xi_store,c(2,3),median)
+    Lthetasqrt_post<-lapply(Lthetasqrt_store,function(l)apply(l,2,median))
     Ltau2_post <- lapply(Ltau2_store,function(l)apply(l,c(2),median))
     Lxi2_post <- lapply(Lxi2_store,function(l)apply(l,c(2),median))
   }else if(prior=="TTVP"){
-    tau2_post<-xi2_post<-lambda2_post<-kappa2_post<-a_tau_post<-a_xi_post<-Ltau2_post<-Lxi2_post<-NULL
+    thetasqrt_post<-Lthetasqrt_post<-tau2_post<-xi2_post<-lambda2_post<-kappa2_post<-a_tau_post<-a_xi_post<-Ltau2_post<-Lxi2_post<-NULL
     D_post <- apply(D_store,c(2,3.4),median)
     Omega_post <- apply(Omega_store,c(2,3,4),median)
     thrsh_post <- apply(thrsh_store,c(2,3),median)
@@ -137,8 +181,8 @@
     Lthrsh_post <- lapply(Lthrsh_store,function(l)apply(l,2,median))
     LV0_post <- lapply(LV0_store,function(l)apply(l,2,median))
   }
-  post <- list(A_post=A_post,a0_post=a0_post,a1_post=a1_post,Phi_post=Phi_post,Ex_post=Ex_post,S_post=S_post,Smed_post=Smed_post,L_post=L_post,
-                vola_post=vola_post,pars_post=pars_post,res_post=res_post,tau2_post=tau2_post,xi2_post=xi2_post,lambda2_post=lambda2_post,
+  post <- list(A_post=A_post,a0_post=a0_post,a1_post=a1_post,Phi_post=Phi_post,Ex_post=Ex_post,S_post=S_post,Smed_post=Smed_post,L_post=L_post,Lthetasqrt_post=Lthetasqrt_post,
+                vola_post=vola_post,pars_post=pars_post,res_post=res_post,tau2_post=tau2_post,thetasqrt_post=thetasqrt_post,xi2_post=xi2_post,lambda2_post=lambda2_post,
                 kappa2_post=kappa2_post,a_tau_post=a_tau_post,a_xi_post=a_xi_post,Ltau2_post=Ltau2_post,Lxi2_post=Lxi2_post,D_post=D_post,
                 Omega_post=Omega_post,thrsh_post=thrsh_post,kappa_post=kappa_post,V0_post=V0_post,LD_post=LD_post,LOmega_post=LOmega_post,
                 Lthrsh_post=Lthrsh_post,LV0_post=LV0_post)
@@ -299,6 +343,8 @@
   res_store    <- array(NA,c(thindraws,bigT,1))
   Sv_store     <- array(NA,c(thindraws,bigT,1))
   pars_store   <- array(NA,c(thindraws,4,1))
+  # state variances
+  thetasqrt_store <- array(NA,c(thindraws,d,1))
   # TVP-NG
   tau2_store   <- array(NA,c(thindraws,d,1))
   xi2_store    <- array(NA,c(thindraws,d,1))
@@ -436,6 +482,7 @@
       Sv_store[count,,] <- Sv_draw
       pars_store[count,,] <- pars_var
       # NG
+      thetasqrt_store[count,,] <- theta_sqrt
       tau2_store[count,,]<- tau2_draw
       xi2_store[count,,] <- xi2_draw
       lambda2_store[count,,] <- lambda2
@@ -449,7 +496,7 @@
   #---------------------------------------------------------------------------------------------------------
   dimnames(A_store)=list(NULL,paste("t",seq(0,bigT),sep="."),colnames(X))
   ret <- list(Y=y,X=X,A_store=A_store,Sv_store=Sv_store,pars_store=pars_store,res_store=res_store,
-              tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
+              thetasqrt_store=thetasqrt_store,tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
   return(ret)
 }
 
@@ -535,7 +582,6 @@
   thrsh.pct      <- hyperpara$thrsh.pct
   thrsh.pct.high <- hyperpara$thres.pct.high
   TVS            <- hyperpara$TVS
-  cons.mod       <- hyperpara$cons.mod
   a.approx       <- hyperpara$a.approx
   sim.kappa      <- hyperpara$sim.kappa
   kappa.grid     <- hyperpara$kappa.grid
@@ -571,6 +617,7 @@
   # prior variance
   sqrttheta1 <- diag(d)*0.1
   sqrttheta2 <-diag(d)*0.01
+  Omega_t <- D_t%*%sqrttheta1+(1-D_t)%*%sqrttheta2
   kappa00 <- kappa0
   if(kappa0<0) kappa00 <- -kappa0 * sd.OLS else kappa00 <- matrix(kappa0,d,1)
 
@@ -657,19 +704,21 @@
       # Step 2a: Sample variances
       A_diff <- diff(A_draw)
       for(dd in 1:d){
-        if(!cons.mod){
-          sig_q <- sqrttheta1[dd,dd]
+        sig_q <- sqrttheta1[dd,dd]
 
-          si <- D_t[2:bigT,dd]
-          s_1 <- B_1 + sum(si)/2 + 0.5
-          s_2 <- B_2 + crossprod(A_diff[si==1,dd,drop=FALSE])
-          sig_q <- 1/rgamma(1,s_1,s_2)
-
-          sqrttheta1[dd,dd] <- sig_q
-          sqrttheta2[dd,dd] <- kappa00[dd,1]
+        if (!a.approx){
+          si <- (abs(A_diff[,dd])>thrsh[dd,1])*1
         }else{
-          sqrttheta1[dd,dd] <- sqrttheta2[dd,dd] <- 0
+          si <- (abs(Achg.OLS[,dd])>thrsh[dd,1])*1
         }
+
+        si <- D_t[2:bigT,dd]
+        s_1 <- B_1 + sum(si)/2 + 0.5
+        s_2 <- B_2 + 0.5*crossprod(A_diff[si==1,dd,drop=FALSE])
+        sig_q <- 1/rgamma(1,s_1,s_2)
+
+        sqrttheta1[dd,dd] <- sig_q
+        sqrttheta2[dd,dd] <- kappa00[dd,1]^2
       }
       #------------------------------------------
       # sample indicator
@@ -679,13 +728,13 @@
         Achg <- cbind(matrix(0,d,1),Achg) #we simply assume that the parameters stayed constant between t=0 and t=1
         if(a.approx) Achg.approx <- Achg.OLS else Achg.approx <- Achg
         grid.mat <- matrix(unlist(lapply(1:d,function(x) .get_grid(Achg[x,],sqrt(sqrttheta1[x,x]),grid.length=grid.length,thrsh.pct=thrsh.pct,thrsh.pct.high=thrsh.pct.high))),ncol = d)
-        probs    <- get_threshold(Achg, sqrttheta1, sqrttheta2,grid.mat,Achg.approx)
+        probs    <- get_threshold(Achg, sqrttheta1, sqrttheta2, grid.mat, Achg.approx)
         for(dd in 1:d){
           post1 <- probs[,dd]
           probs1 <- exp(post1-max(post1))/sum(exp(post1-max(post1)))
           thrsh[dd,] <- sample(grid.mat[,dd],1,prob=probs1)
           if (!a.approx){
-            D_t[,dd] <- (abs(Achg[jj,])>thrsh[dd,])*1 #change 2:T usw. here
+            D_t[,dd] <- (abs(Achg[dd,])>thrsh[dd,])*1 #change 2:T usw. here
           }else{
             D_t[,dd] <- (abs(Achg.OLS[dd,])>thrsh[dd,])*1 #change 2:T usw. here
           }
@@ -714,7 +763,7 @@
       # local component
       for(dd in 1:d){
         res <- try(do_rgig1(lambda=a_tau-0.5,
-                            chi=A_draw[dd,1]^2,
+                            chi=A_draw[1,dd]^2,
                             psi=a_tau*lambda2_tau), silent=TRUE)
         V0prior[dd] <- ifelse(is(res,"try-error"),next,res)
       }
@@ -921,10 +970,13 @@
   dimnames(A_store) <- list(NULL,timepoints,colnames(X),colnames(Y))
   Smed_store <- apply(S_store,c(1,3,4),median)
   if(prior=="TVP"){
+    thetasqrt_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$thetasqrt_store[,mm:K[mm],]),along=3)
+    Lthetasqrt_store <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$thetasqrt_store[,1:(mm-1),,drop=FALSE],drop=3))
     tau2_store<-xi2_store<-Ltau2_store<-Lxi2_store<-lambda2_store<-kappa2_store<-a_xi_store<-a_tau_store<-D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
   }else if(prior=="TVP-NG"){
     D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
     # general stuff
+    thetasqrt_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$thetasqrt_store[,mm:K[mm],]),along=3)
     lambda2_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$lambda2_store),along=3)
     kappa2_store  <- abind(lapply(1:M,function(mm)post_draws[[mm]]$kappa2_store),along=3)
     a_xi_store    <- abind(lapply(1:M,function(mm)post_draws[[mm]]$a_xi_store),along=3)
@@ -932,10 +984,11 @@
     tau2_store    <- abind(lapply(1:M,function(mm)post_draws[[mm]]$tau2_store[,mm:K[mm],]),along=3)
     xi2_store     <- abind(lapply(1:M,function(mm)post_draws[[mm]]$xi2_store[,mm:K[mm],]),along=3)
     ## ATTENTION: variances of L just as list !!
+    Lthetasqrt_store <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$thetasqrt_store[,1:(mm-1),,drop=FALSE],drop=3))
     Ltau2_store   <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$tau2_store[,1:(mm-1),,drop=FALSE],drop=3))
     Lxi2_store    <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$xi2_store[,1:(mm-1),,drop=FALSE],drop=3))
   }else if(prior=="TTVP"){
-    tau2_store<-xi2_store<-Ltau2_store<-Lxi2_store<-lambda2_store<-kappa2_store<-a_xi_store<-a_tau_store<-NULL
+    thetasqrt_store<-Lthetasqrt_store<-tau2_store<-xi2_store<-Ltau2_store<-Lxi2_store<-lambda2_store<-kappa2_store<-a_xi_store<-a_tau_store<-NULL
     # general stuff
     kappa_store <- abind(lapply(1:M,function(mm)post_draws[[mm]]$kappa_store),along=3)
     D_store     <- abind(lapply(1:M,function(mm)post_draws[[mm]]$D_store[,,mm:K[mm],]),along=4)
@@ -948,7 +1001,7 @@
     Lthrsh_store<- lapply(2:M,function(mm)adrop(post_draws[[mm]]$thrsh_store[,1:(mm-1),,drop=FALSE],drop=3))
     LV0_store   <- lapply(2:M,function(mm)adrop(post_draws[[mm]]$V0_store[,1:(mm-1),,drop=FALSE],drop=3))
   }
-  ret <- list(Y=Y,X=X,A_store=A_store,L_store=L_store,Sv_store=Sv_store,S_store=S_store,Smed_store=Smed_store,pars_store=pars_store,res_store=res_store,
+  ret <- list(Y=Y,X=X,A_store=A_store,L_store=L_store,Sv_store=Sv_store,S_store=S_store,Smed_store=Smed_store,pars_store=pars_store,res_store=res_store,thetasqrt_store=thetasqrt_store,Lthetasqrt_store=Lthetasqrt_store,
               tau2_store=tau2_store,xi2_store=xi2_store,Ltau2_store=Ltau2_store,Lxi2_store=Lxi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store,
               D_store=D_store,Omega_store=Omega_store,thrsh_store=thrsh_store,kappa_store=kappa_store,V0_store=V0_store,LD_store=LD_store,LOmega_store=LOmega_store,Lthrsh_store=Lthrsh_store,LV0_store=LV0_store)
   return(ret)
@@ -1203,7 +1256,7 @@
     }
     #----------------------------------------------------------------------------
     # Step 4a: Shrinkage priors on state variances
-    kappa2       <- rgamma(1, d1+a_xi*M^2,  d2+0.5*a_xi*mean(xi2.draw))
+    kappa2       <- rgamma(1, d1+a_xi*k,  d2+0.5*k*a_xi*mean(xi2.draw))
     for(ii in 1:k){
       for(jj in 1:M){
         xi2.draw[ii,jj]  <- do_rgig1(lambda=a_xi-0.5, chi=theta_draw[ii,jj], psi=a_xi*kappa2)
@@ -1212,7 +1265,7 @@
     xi2.draw[xi2.draw<1e-7] <- 1e-7
     if(sample_A){
       before <- a_xi
-      a_xi   <- MH_step(a_xi, scale_xi, k*M, kappa2, as.vector(theta_sqrt), b_xi, nu_xi, d1, d2)
+      a_xi   <- MH_step(a_xi, scale_xi, k, kappa2, as.vector(theta_sqrt), b_xi, nu_xi, d1, d2)
       if(before!=a_xi){
         acc_xi <- acc_xi + 1
       }
@@ -1258,7 +1311,7 @@
       tau2.draw[slct.i,] <- tau2.i
     }
     # Step 4c: Shrinkage prior on covariances
-    lambda2_L <- rgamma(1, e1+a_L_tau*v,  e2+0.5*a_L_tau*mean(L_prior[lower.tri(L_prior)]))
+    lambda2_L <- rgamma(1, e1+a_L_tau*v,  e2+0.5*v*a_L_tau*mean(L_prior[lower.tri(L_prior)]))
     for(ii in 2:M){
       for(jj in 1:(ii-1)){
         res  <- do_rgig1(lambda=a_L_tau-0.5, chi=(L_draw[mm,ii]-l_prior[mm,ii])^2, psi=a_L_tau*lambda2_L)
@@ -1343,3 +1396,4 @@
               tau2_store=tau2_store,xi2_store=xi2_store,lambda2_store=lambda2_store,kappa2_store=kappa2_store,a_xi_store=a_xi_store,a_tau_store=a_tau_store)
   return(ret)
 }
+

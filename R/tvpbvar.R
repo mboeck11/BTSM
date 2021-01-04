@@ -128,7 +128,7 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thi
   default_hyperpara <- list(c0=2.5,g0=5, prmean=1,# Gamma hyperparameter SIGMA (homoskedastic case) and mean
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
                             d1=0.001, d2=0.001, e1=0.001, e2=0.001, b_xi=10, b_tau=10, nu_xi=5, nu_tau=5, a_start=0.1, a_log=FALSE, sample_A=TRUE, # TVP-NG
-                            B_1=2,B_2=1,kappa0=1e-07,a_tau=0.1,c_tau=0.01,d_tau=0.01,h0prior="stationary",grid.length=150,thrsh.pct=0.1,thres.pct.high=1,TVS=TRUE,cons.mod=FALSE,a.approx=FALSE,sim.kappa=FALSE,kappa.grid=seq(1e-4,10,0.1),MaxTrys=100) # TTVP
+                            B_1=2,B_2=1,kappa0=1e-07,a_tau=0.1,c_tau=0.01,d_tau=0.01,h0prior="stationary",grid.length=150,thrsh.pct=0.1,thres.pct.high=1,TVS=TRUE,a.approx=FALSE,sim.kappa=FALSE,kappa.grid=seq(1e-4,10,0.1),MaxTrys=100) # TTVP
   paras     <- names(default_hyperpara)
   if(is.null(hyperpara)){
     if(verbose) cat("\t No hyperparameters are chosen, default setting applied.\n")
@@ -166,30 +166,26 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thi
     }
   }
   if(is.null(cores)) {cores <- 1}
-  #------------------------------ estimate BVAR ---------------------------------------------------------------#
-  if(verbose) cat("\nEstimation of model starts...\n")
-  # sourceCpp("./src/threshold_functions.cpp")
-  # sourceCpp("./src/do_rgig1.cpp")
-  globalpost <- .TVPBVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores)
   #--------------------------- checking eigenvalues ----------------------------------------------------------#
   if(is.logical(eigen)){
     if(eigen){trim<-1.00}else{trim<-NULL}
   }else{
     trim<-eigen;eigen<-TRUE
   }
-  if(eigen){
-    # check medians: could be done more carefully
-    A.eigen <- applyfun(1:args$thindraws,function(irep){
-      Cm <- .gen_compMat(apply(globalpost$store$A_store[irep,,,],c(2,3),median),ncol(Yraw),plag)$Cm
-      return(max(abs(Re(eigen(Cm)$values))))
-    })
-    globalpost$post$A.eigen <- unlist(A.eigen)
-  }
+  #------------------------------ estimate BVAR ---------------------------------------------------------------#
+  if(verbose) cat("\nEstimation of model starts...\n")
+  sourceCpp("./src/threshold_functions.cpp")
+  sourceCpp("./src/do_rgig1.cpp")
+  globalpost <- .TVPBVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores,eigen=eigen,trim=trim)
+  args$Y <- globalpost$Y
+  args$X <- globalpost$X
+  args$thindraws <- ifelse(eigen,sum(globalpost$store$A.eigen<trim),args$thindraws)
+  if(verbose) cat(paste0("\nModel yields ", args$thindraws," stable draws."))
   #---------------------- return output ---------------------------------------------------------------------------#
   out  <- structure(list("args"=args,
                          "xglobal"=xglobal,
                          "post"=globalpost$post,
-                         "store"=globalpost$store), class = "bvar")
+                         "store"=globalpost$store), class = "tvpbvar")
   end.tvpbvar <- Sys.time()
   diff.tvpbvar <- difftime(end.tvpbvar,start.tvpbvar,units="mins")
   mins.tvpbvar <- round(diff.tvpbvar,0); secs.tvpbvar <- round((diff.tvpbvar-floor(diff.tvpbvar))*60,0)
@@ -205,7 +201,7 @@ print.tvpbvar<-function(x, ...){
   cat("\n")
   cat("Model Info:")
   cat("\n")
-  prior <- ifelse(x$args$prior=="Standard TVP setup","Time-varying parameters",ifelse(x$args$prior=="TVP-NG","TVP setup with Normal-Gamma shrinkage prior",
+  prior <- ifelse(x$args$prior=="TVP","Standard TVP setup",ifelse(x$args$prior=="TVP-NG","TVP setup with Normal-Gamma shrinkage prior",
                                                                        "Threshold-TVP prior"))
   cat(paste("Prior: ",prior,sep=""))
   cat("\n")
