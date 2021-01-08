@@ -174,8 +174,10 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thi
   }
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
-  sourceCpp("./src/threshold_functions.cpp")
-  sourceCpp("./src/do_rgig1.cpp")
+  # sourceCpp("./src/threshold_functions.cpp")
+  # sourceCpp("./src/do_rgig1.cpp")
+  # sourceCpp("../../../../PACKAGES/BTSM/src/threshold_functions.cpp")
+  # sourceCpp("../../../../PACKAGES/BTSM/src/do_rgig1.cpp")
   globalpost <- .TVPBVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores,eigen=eigen,trim=trim)
   args$Y <- globalpost$Y
   args$X <- globalpost$X
@@ -212,7 +214,7 @@ print.tvpbvar<-function(x, ...){
   cat(paste("Size of TVPBVAR object: ",format(object.size(x),units="MB"),sep=""))
   cat("\n")
   if(x$args$eigen){
-    cat(paste("Model has ",sum(x$post$A.eigen<1)," stable draws.",sep=""))
+    cat(paste("Model has ",sum(x$store$A.eigen<1)," stable draws.",sep=""))
     cat("\n")
     cat("---------------------------------------------------------------------------------------")
   }

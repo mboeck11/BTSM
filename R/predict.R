@@ -11,7 +11,7 @@
 #' @importFrom stats rnorm tsp sd
 #' @importFrom utils setTxtProgressBar txtProgressBar
 #' @export
-"predict" <- function(object, ..., n.ahead=24, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
+"predict" <- function(object, ..., n.ahead=4, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
   #------------------------------ message to console -------------------------------------------------------#
   if(verbose){
     if(class(object)=="bvar")
@@ -23,11 +23,11 @@
     if(class(object)=="tvpbvar")
       cat("\nStart doing predictions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
   }
-  UseMethod("predict", x)
+  UseMethod("predict", object)
 }
 
 #' @export
-predict.bvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
+predict.bvar <- function(object, ..., n.ahead=4, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
   start.pred <- Sys.time()
   if(verbose) cat("\nStart computing predictions of Bayesian Vector Autoregression.\n\n")
   if(verbose) cat("Start computing...\n")
@@ -41,7 +41,7 @@ predict.bvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,.84
 }
 
 #' @export
-predict.tvpbvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
+predict.tvpbvar <- function(object, ..., n.ahead=4, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, verbose=TRUE){
   start.pred <- Sys.time()
   if(verbose) cat("\nStart computing predictions of Time-varying parameter Bayesian Vector Autoregression.\n\n")
   if(verbose) cat("Start computing...\n")
@@ -55,6 +55,7 @@ predict.tvpbvar <- function(object, ..., n.ahead=1, quantiles=c(.05,.10,.16,.50,
 }
 
 #' @name .predict.generator
+#' @importFrom stringr str_pad
 #' @noRd
 predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.90,.95), applyfun=NULL, cores=NULL, save.store=FALSE, TVP=FALSE){
   thindraws  <- object$args$thindraws
@@ -117,7 +118,8 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
       pars_var <- pars_store[irep,,]
     }
     # Step II: get last data point
-    Mean00  <- xglobal[bigT,]
+    Xpred <- .mlag_pred(xglobal,plag)
+    Mean00  <- t(Xpred[bigT,,drop=FALSE])
     Sigma00 <- matrix(0,M*plag,M*plag)
     y2      <- NULL
     #gets companion form
@@ -126,11 +128,11 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
     Jm    <- aux$Jm
     Sig_t <- L_t %*% diag(exp(Htt)) %*% t(L_t)
     Jsigt <- Jm%*%Sig_t%*%t(Jm)
+    if(cons==1) consf <- rbind(t(A_t["cons",,drop=FALSE]),matrix(0,(plag-1)*M,1)) else consf <- matrix(0,M*plag,1)
+    if(trend==1) trendf <- rbind(t(A_t["trend",,drop=FALSE]),matrix(0,(plag-1)*M,1)) else trendf <- matrix(0,M*plag,1)
     # this is the forecast loop
     for (ih in 1:n.ahead){
-      Mean00  <- Mm%*%Mean00
-      if(cons)  Mean00 <- Mean00 + t(A_t["cons",,drop=FALSE])
-      if(trend) Mean00 <- Mean00 + t(A_t["trend"])*(bigT+ih-1)
+      Mean00  <- Mm%*%Mean00 + consf + trendf*(bigT+ih)
       Sigma00 <- Mm%*%Sigma00%*%t(Mm) + Jsigt
       chol_varyt <- try(t(chol(Sigma00[1:M,1:M])),silent=TRUE)
       if(is(chol_varyt,"try-error")){
@@ -140,7 +142,11 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
       }
       if(TVP){
         A_t <- matrix(rnorm(K*M,as.vector(A_t),Q_t),K,M, dimnames=dimnames(A_t))
-        for(mm in 2:M) L_t[mm,1:(mm-1)] <- rnorm(mm-1,L_t[mm,1:(mm-1)],LQ_t[[mm-1]])
+        Q_t <- Q_t + Q_t
+        for(mm in 2:M){
+          L_t[mm,1:(mm-1)] <- rnorm(mm-1,L_t[mm,1:(mm-1)],LQ_t[[mm-1]])
+          LQ_t[[mm-1]] <- LQ_t[[mm-1]] + LQ_t[[mm-1]]
+        }
       }
       if(SV){
         Htt   <- pars_var["mu",]+pars_var["phi",]*(Htt-pars_var["mu",])+rnorm(M,0,sqrt(pars_var["sigma",]))

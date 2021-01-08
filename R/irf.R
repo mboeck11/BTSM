@@ -63,6 +63,7 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
     if(verbose)
       cat("Identification schem: Identification via proxy variable.\n")
   }
+  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
   out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
@@ -102,14 +103,15 @@ irf.tvpbvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy
   # median response
   x.med <- x
   x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
-  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=FALSE)
-  out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
-  for(tt in 1:bigT){
-    x.t <- x
-    x.t$store$A_store <- x.t$store$A_store[,tt,,]
-    x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
-    out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=FALSE)$posterior
-  }
+  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,scal=scal,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
+  # out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
+  # for(tt in 1:bigT){
+  #   if(verbose) cat(paste0("Time point: ", tt, " of ", bigT,"."))
+  #   x.t <- x
+  #   x.t$store$A_store <- x.t$store$A_store[,tt,,]
+  #   x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
+  #   out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,scal=scal,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)$posterior
+  # }
   ## bind together somehow
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
@@ -139,6 +141,7 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
     if(verbose)
       cat("Identification schem: Identification via proxy variable.\n")
   }
+  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
   out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
@@ -242,7 +245,7 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   x$store$S_store    <- S_store
   x$store$Smed_store <- apply(S_store,c(1,3,4),median)
   x$store$res_store  <- res_store
-
+  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
   out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
   if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
@@ -257,7 +260,7 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
 #' @importFrom stats median
 #' @importFrom stringr str_pad
 #' @importFrom utils object.size
-.irf.generator <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,
+.irf.generator <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,
                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), verbose=TRUE){
   #------------------------------ get stuff -------------------------------------------------------#
   plag        <- x$args$plag
@@ -461,7 +464,6 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   dimnames(imp_posterior)[[4]] <- paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")
   #------------------------------ start computing irfs  ---------------------------------------------------#
   start.comp <- Sys.time()
-  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
   imp.obj <- applyfun(1:thindraws,function(irep){
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
@@ -567,8 +569,9 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
       stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
     }
     # check scaling, if no scaling, set it to 1
+    M <- ncol(x$args$Data)
     if(is.null(scal)) scal <- 1
-    if(length(scal)!=bigK) scal <- rep(scal,bigK)
+    if(length(scal)!=M) scal <- rep(scal,M)
     type <- sign.constr$type
     if(is.null(type)) type <- "short-run"
     # check signs horizons

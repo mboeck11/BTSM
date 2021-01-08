@@ -62,9 +62,9 @@
     Smed_store <- apply(S_store,c(1,3,4),median)
     if(SV){
       vola_store  <- bvar$Sv_store; dimnames(vola_store) <- list(NULL,NULL,colnames(Y))
-      pars_store  <- bvar$pars_store
-      vola_post   <- apply(vola_store,c(2,3),median)
-      pars_post   <- apply(pars_store,c(2,3),median)
+      pars_store  <- bvar$pars_store; dimnames(pars_store) <- list(NULL,c("mu","phi","sigma","latent0"),colnames(Y))
+      vola_post   <- apply(vola_store,c(2,3),median); dimnames(vola_post) <- list(NULL,colnames(Y))
+      pars_post   <- apply(pars_store,c(2,3),median); dimnames(pars_post) <- list(c("mu","phi","sigma","latent0"),colnames(Y))
     }else{
       vola_store  <- bvar$Sv_store; pars_store <- NULL;
       vola_post   <- apply(vola_store,c(2,3),median); pars_post <- NULL

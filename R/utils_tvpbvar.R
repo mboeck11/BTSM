@@ -60,16 +60,16 @@
     D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store <- NULL
   }else if(prior=="TVP-NG"){
     D_store<-Omega_store<-thrsh_store<-kappa_store<-V0_store<-LD_store<-LOmega_store<-Lthrsh_store<-LV0_store<-NULL
-    thetasqrt_store<- tvpbvar$thetasqrt_store
-    tau2_store    <- tvpbvar$tau2_store
-    xi2_store     <- tvpbvar$xi2_store
-    lambda2_store <- tvpbvar$lambda2_store
-    kappa2_store  <- tvpbvar$kappa2_store
-    a_tau_store   <- tvpbvar$a_tau_store
-    a_xi_store    <- tvpbvar$a_xi_store
+    thetasqrt_store <- tvpbvar$thetasqrt_store
+    tau2_store      <- tvpbvar$tau2_store
+    xi2_store       <- tvpbvar$xi2_store
+    lambda2_store   <- tvpbvar$lambda2_store
+    kappa2_store    <- tvpbvar$kappa2_store
+    a_tau_store     <- tvpbvar$a_tau_store
+    a_xi_store      <- tvpbvar$a_xi_store
     Lthetasqrt_store<-tvpbvar$Lthetasqrt_store
-    Ltau2_store   <- tvpbvar$Ltau2_store
-    Lxi2_store    <- tvpbvar$Lxi2_store
+    Ltau2_store     <- tvpbvar$Ltau2_store
+    Lxi2_store      <- tvpbvar$Lxi2_store
   }else if(prior=="TTVP"){
     thetasqrt_store<-Lthetasqrt_store<-tau2_store<-xi2_store<-lambda2_store<-kappa2_store<-a_tau_store<-a_xi_store<-Ltau2_store<-Lxi2_store<-NULL
     D_store       <- tvpbvar$D_store
@@ -84,11 +84,12 @@
   }
   if(eigen){
     # check medians: could be done more carefully
-    A.eigen <- unlist(applyfun(1:args$thindraws,function(irep){
+    A.eigen <- unlist(applyfun(1:(draws/thin),function(irep){
       Cm <- .gen_compMat(apply(A_store[irep,,,],c(2,3),median),ncol(Yraw),plag)$Cm
       return(max(abs(Re(eigen(Cm)$values))))
     }))
     trim_eigen <- which(A.eigen<trim)
+    if(length(trim_eigen)==0) stop("No stable draws found. Either increase number of draws or trimming factor.")
     A_store<-A_store[trim_eigen,,,,drop=FALSE]
     if(cons) a0_store <- a0_store[trim_eigen,,,drop=FALSE]
     if(trend) a1_store <- a1_store[trim_eigen,,,drop=FALSE]
@@ -148,7 +149,7 @@
   for(jj in 1:plag){
     Phi_post[[jj]]    <- A_post[,which(dims==paste("Ylag",jj,sep="")),,drop=FALSE]
   }
-  vola_post <- apply(vola_store,c(2,3),median)
+  vola_post <- apply(vola_store,c(2,3),median); dimnames(vola_post) <- list(NULL,colnames(Y))
   if(SV){
     pars_post <- apply(pars_store,c(2,3),median); dimnames(pars_post) <- list(c("mu","phi","sigma","latent0"),colnames(Y))
   }else pars_post <- NULL
@@ -190,7 +191,7 @@
 }
 
 #' @name .TVPBVAR_noncentered_R.m
-#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv sv_normal sv_beta sv_gamma
 #' @importFrom MASS ginv mvrnorm
 #' @importFrom matrixcalc hadamard.prod
 #' @importFrom methods is
@@ -393,10 +394,9 @@
     #A_diff     <- diff(A_draw) # same as line above
     for(dd in 1:d){
       # theta.new
-      res <- GIGrvg::rgig(1,
-                          lambda=-bigT/2,
-                          chi=sum(A_diff[,dd]^2)+(A_draw[1,dd]-Am_draw[dd,1])^2,
-                          psi=1/xi2_draw[dd])
+      res <- do_rgig1(lambda=-bigT/2,
+                      chi=sum(A_diff[,dd]^2)+(A_draw[1,dd]-Am_draw[dd,1])^2,
+                      psi=1/xi2_draw[dd])
       theta_draw[dd] <- res
       theta_sqrt[dd] <- sqrt(res)*theta_sign[dd]
       # betam.new
@@ -501,7 +501,7 @@
 }
 
 #' @name .TVPBVAR_centered_R.m
-#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv sv_normal sv_beta sv_gamma
 #' @importFrom dlm dlmModReg dlmMLE dlmSmooth
 #' @importFrom MASS ginv mvrnorm
 #' @importFrom matrixcalc hadamard.prod
@@ -924,7 +924,7 @@
 
 #' @name .var_posterior
 #' @importFrom MASS ginv
-#' @importFrom abind adrop
+#' @importFrom abind adrop abind
 #' @noRd
 .var_posterior <- function(post_draws, prior, draws, applyfun, cores){
   M <- length(post_draws)
@@ -1008,7 +1008,7 @@
 }
 
 #' @name .TVPBVAR_linear_R
-#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv sv_normal sv_beta sv_gamma
 #' @importFrom MASS ginv mvrnorm
 #' @importFrom matrixcalc hadamard.prod
 #' @importFrom methods is

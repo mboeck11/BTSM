@@ -7,7 +7,7 @@
 predict(
   object,
   ...,
-  n.ahead = 24,
+  n.ahead = 4,
   quantiles = c(0.05, 0.1, 0.16, 0.5, 0.84, 0.9, 0.95),
   applyfun = NULL,
   cores = NULL,

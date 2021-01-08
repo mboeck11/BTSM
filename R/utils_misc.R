@@ -1,17 +1,30 @@
 #' @name .mlag
 #' @noRd
-.mlag <- function(X,lag){
-  p <- lag
+.mlag <- function(X,plag){
   X <- as.matrix(X)
   Traw <- nrow(X)
   N <- ncol(X)
-  Xlag <- matrix(0,Traw,p*N)
-  for (ii in 1:p){
-    Xlag[(p+1):Traw,(N*(ii-1)+1):(N*ii)] <- X[(p+1-ii):(Traw-ii),(1:N)]
+  Xlag <- matrix(0,Traw,plag*N)
+  for (ii in 1:plag){
+    Xlag[(plag+1):Traw,(N*(ii-1)+1):(N*ii)] <- X[(plag+1-ii):(Traw-ii),(1:N)]
   }
-  colnames(Xlag) <- paste0(colnames(X),".lag",rep(seq(p),each=N))
+  colnames(Xlag) <- paste0(colnames(X),".lag",rep(seq(plag),each=N))
   return(Xlag)
 }
+
+.mlag_pred <- function(X,plag){
+  X <- as.matrix(X)
+  Traw <- nrow(X)
+  N <- ncol(X)
+  if(plag>1){
+    Xlag <- matrix(0,Traw,(plag-1)*N)
+    for(ii in 1:(plag-1)) Xlag[(plag+1):Traw,(N*(ii-1)+1):(N*ii)] <- X[(plag+1-ii):(Traw-ii),(1:N)]
+  }else Xlag <- NULL
+  Xpred <- cbind(X,Xlag)
+  if(plag>1) colnames(Xpred) <- c(colnames(X),paste0(colnames(X),".lag",rep(seq(plag-1),each=N)))
+  return(Xpred)
+}
+
 
 #' @name .gen_compMat
 #' @export
