@@ -4,7 +4,7 @@
 \alias{irf}
 \title{Impulse Response Function}
 \usage{
-irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE,
+irf(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE,
            applyfun=NULL, cores=NULL, verbose=TRUE)
 }
 \arguments{
@@ -14,23 +14,7 @@ irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=
 
 \item{ident}{preferred identification scheme.}
 
-\item{scal}{scaling factor.}
-
-\item{sign.constr}{the user should submit a list containing the following entries \itemize{
-\item{\code{shock1}}{ is a list object that defines sign restrictions for a particular shock.}
-\itemize{
-\item{\code{shockvar}}{ is a character vector containing the variable to shock.}
-\item{\code{restrictions}}{ is a list containing the variables to restrict.}
-\item{\code{sign}}{ is a character vector of length of set of restrictions + 1, specifying the signs to impose. Use either \code{>}, \code{<} or \code{0}. The latter implements zero restrictions according to Arias et al. (2019). First entry is for the shock, say \code{AT.ltir} should go up, the following entries refer to the restrictions. \code{sign.constr$shock1$sign=c(">", "<", "<")} would impose \code{AT.ltir} to increase, and variables specified in \code{sign.constr$shock1$restricionts$rest1} and \code{sign.constr$shock1$restricionts$rest2} to decrease.}
-\item{\code{rest.horz}}{ is a vector with same length as slot \code{sign} above and specifies the length of periods the restrictions are imposed. If \code{rest.horz} is 1, only impact restrictions are considered.}
-\item{\code{constr}}{ is a vector with same length as slot \code{sign} above with elements lying between \code{0} and \code{1}. It specifies the percentage of countries for which cross-country restrictions have to hold. If no cross-country restrictions are supplied, set all elements of \code{constr} to 1.}
-\item{\code{scal}}{ optional numeric in case impact normalization is desired.}
-}
-\item{\code{MaxTries}}{ Optional numeric corresponding to the maximum tries to search for a rotation matrix that fulfills the user-specified restrictions. Default is set to 7500. After \code{MaxTries} unsuccessful tries the algorithm sets the impulse response for that specific posterior draw to \code{NA}.}
-\item{\code{shock2}}{ define a second list with the same arguments as \code{shock1} to identify a second shock. Can be used iteratively to identify multiple shocks.}
-}}
-
-\item{proxy}{in case of identification via proxy.}
+\item{shockinfo}{dataframe with specified details on shock}
 
 \item{save.store}{If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.}
 

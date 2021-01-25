@@ -114,6 +114,7 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
       L_t <- L_store[irep,,]
     }
     Htt <- vola_store[irep,bigT,]
+    Stt <- S_store[irep,bigT,,]
     if(SV){
       pars_var <- pars_store[irep,,]
     }
@@ -126,7 +127,7 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
     aux   <- .gen_compMat(A_t,M,plag)
     Mm    <- aux$Cm
     Jm    <- aux$Jm
-    Sig_t <- L_t %*% diag(exp(Htt)) %*% t(L_t)
+    if(!is.null(Htt)) Sig_t <- L_t %*% diag(exp(Htt)) %*% t(L_t) else Sig_t <- Stt
     Jsigt <- Jm%*%Sig_t%*%t(Jm)
     if(cons==1) consf <- rbind(t(A_t["cons",,drop=FALSE]),matrix(0,(plag-1)*M,1)) else consf <- matrix(0,M*plag,1)
     if(trend==1) trendf <- rbind(t(A_t["trend",,drop=FALSE]),matrix(0,(plag-1)*M,1)) else trendf <- matrix(0,M*plag,1)
@@ -140,14 +141,14 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
       }else{
         yf <- Mean00[1:M]+chol_varyt%*%rnorm(M,0,1)
       }
-      if(TVP){
-        A_t <- matrix(rnorm(K*M,as.vector(A_t),Q_t),K,M, dimnames=dimnames(A_t))
-        Q_t <- Q_t + Q_t
-        for(mm in 2:M){
-          L_t[mm,1:(mm-1)] <- rnorm(mm-1,L_t[mm,1:(mm-1)],LQ_t[[mm-1]])
-          LQ_t[[mm-1]] <- LQ_t[[mm-1]] + LQ_t[[mm-1]]
-        }
-      }
+      # if(TVP){
+      #   A_t <- matrix(rnorm(K*M,as.vector(A_t),Q_t),K,M, dimnames=dimnames(A_t))
+      #   Q_t <- Q_t + Q_t
+      #   for(mm in 2:M){
+      #     L_t[mm,1:(mm-1)] <- rnorm(mm-1,L_t[mm,1:(mm-1)],LQ_t[[mm-1]])
+      #     LQ_t[[mm-1]] <- LQ_t[[mm-1]] + LQ_t[[mm-1]]
+      #   }
+      # }
       if(SV){
         Htt   <- pars_var["mu",]+pars_var["phi",]*(Htt-pars_var["mu",])+rnorm(M,0,sqrt(pars_var["sigma",]))
         Jsigt <- L_t %*% diag(exp(Htt))%*%t(L_t)
@@ -159,8 +160,11 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
   for(irep in 1:thindraws){
     pred_store[irep,,] <- pred.obj[[irep]]
   }
-  pred_post <- apply(pred_store,c(2,3),quantile,quantiles)
-  dimnames(pred_post)<-list(paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep="."),varNames,1:n.ahead)
+  pred_post <- array(NA, dim=c(length(quantiles),M,n.ahead),
+                     dimnames=list(paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep="."),varNames,1:n.ahead))
+  for(qq in 1:length(quantiles)){
+    pred_post[qq,,] <- apply(pred_store,c(2,3),quantile,quantiles[qq])
+  }
 
   if(h>n.ahead) {
     h <- n.ahead
@@ -172,8 +176,8 @@ predict.generator <- function(object, n.ahead, quantiles=c(.05,.10,.16,.50,.84,.
     dimnames(lps.stats)[[1]] <- colnames(xglobal)
     dimnames(lps.stats)[[2]] <- c("mean","sd")
     dimnames(lps.stats)[[3]] <- 1:h
-    lps.stats[,"mean",]      <- apply(pred_store[,,1:h],c(2:3),mean)
-    lps.stats[,"sd",]        <- apply(pred_store[,,1:h],c(2:3),sd)
+    lps.stats[,"mean",]      <- apply(pred_store[,,1:h,drop=FALSE],c(2,3),mean)
+    lps.stats[,"sd",]        <- apply(pred_store[,,1:h,drop=FALSE],c(2,3),sd)
     hold.out<-yfull[(nrow(yfull)+1-h):nrow(yfull),,drop=FALSE]
   }else{
     lps.stats<-NULL

@@ -100,6 +100,10 @@ bivar<-function(Data,Idata,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,
     args$time <- timeindex
     args$Traw <- length(timeindex)
   }
+  # check interactdion data
+  if(nrow(Idata)!=nrow(Data)){
+    stop("Please provide Data and Idata with same length.")
+  }
   # check truly exogenous variables
   if(!is.null(Ex)){
     if(is.matrix(Ex)){

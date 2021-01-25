@@ -1,52 +1,29 @@
 #' @name irf
 #' @title Impulse Response Function
-#' @usage irf(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE,
+#' @usage irf(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE,
 #'            applyfun=NULL, cores=NULL, verbose=TRUE)
 #' @param x object of class \code{bvar}.
 #' @param n.ahead forecasting horizon.
 #' @param ident preferred identification scheme.
-#' @param scal scaling factor.
-#' @param sign.constr the user should submit a list containing the following entries \itemize{
-#' \item{\code{shock1}}{ is a list object that defines sign restrictions for a particular shock.}
-#' \itemize{
-#' \item{\code{shockvar}}{ is a character vector containing the variable to shock.}
-#' \item{\code{restrictions}}{ is a list containing the variables to restrict.}
-#' \item{\code{sign}}{ is a character vector of length of set of restrictions + 1, specifying the signs to impose. Use either \code{>}, \code{<} or \code{0}. The latter implements zero restrictions according to Arias et al. (2019). First entry is for the shock, say \code{AT.ltir} should go up, the following entries refer to the restrictions. \code{sign.constr$shock1$sign=c(">", "<", "<")} would impose \code{AT.ltir} to increase, and variables specified in \code{sign.constr$shock1$restricionts$rest1} and \code{sign.constr$shock1$restricionts$rest2} to decrease.}
-#' \item{\code{rest.horz}}{ is a vector with same length as slot \code{sign} above and specifies the length of periods the restrictions are imposed. If \code{rest.horz} is 1, only impact restrictions are considered.}
-#' \item{\code{constr}}{ is a vector with same length as slot \code{sign} above with elements lying between \code{0} and \code{1}. It specifies the percentage of countries for which cross-country restrictions have to hold. If no cross-country restrictions are supplied, set all elements of \code{constr} to 1.}
-#' \item{\code{scal}}{ optional numeric in case impact normalization is desired.}
-#' }
-#' \item{\code{MaxTries}}{ Optional numeric corresponding to the maximum tries to search for a rotation matrix that fulfills the user-specified restrictions. Default is set to 7500. After \code{MaxTries} unsuccessful tries the algorithm sets the impulse response for that specific posterior draw to \code{NA}.}
-#' \item{\code{shock2}}{ define a second list with the same arguments as \code{shock1} to identify a second shock. Can be used iteratively to identify multiple shocks.}
-#' }
-#' @param proxy in case of identification via proxy.
+#' @param shockinfo dataframe with specified details on shock
 #' @param save.store If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.
 #' @param applyfun Allows for user-specific apply function, which has to have the same interface than \code{lapply}. If \code{cores=NULL} then \code{lapply} is used, if set to a numeric either \code{parallel::parLapply()} is used on Windows platforms and \code{parallel::mclapply()} on non-Windows platforms.
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
-"irf" <- function(x, n.ahead=24, ident=NULL, scal=1, sign.constr=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+"irf" <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                   quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
-  #------------------------------ message to console -------------------------------------------------------#
-  if(verbose){
-    if(class(x)=="bvar")
-      cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
-    if(class(x)=="bvec")
-      cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
-    if(class(x)=="bivar")
-      cat("\nStart computing impulse response functions of Bayesian Interacted Vector Autoregression.\n\n")
-    if(class(x)=="tvpbvar")
-      cat("\nStart computing impulse response functions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
-  }
   #------------------------------ do checks ---------------------------------------------------------------#
-  .irf.checks(x=x, n.ahead=n.ahead, ident=ident, scal=scal, sign.constr=sign.constr, proxy=proxy)
+  .irf.checks(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,quantiles=quantiles)
+  #------------------------------ use irf method ----------------------------------------------------------#
   UseMethod("irf", x)
 }
 
 #' @export
-irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
+  cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
   if(ident=="chol-shortrun"){
     if(verbose)
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
@@ -63,8 +40,8 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
     if(verbose)
       cat("Identification schem: Identification via proxy variable.\n")
   }
-  if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  if(verbose) cat(paste("Start impulse response analysis on ", ifelse(is.null(cores),1,cores), " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -74,9 +51,10 @@ irf.bvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NU
 }
 
 #' @export
-irf.tvpbvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                         quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
+  cat("\nStart computing impulse response functions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
   if(ident=="chol-shortrun"){
     if(verbose)
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
@@ -103,14 +81,14 @@ irf.tvpbvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy
   # median response
   x.med <- x
   x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
-  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,scal=scal,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
+  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
   # out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
   # for(tt in 1:bigT){
   #   if(verbose) cat(paste0("Time point: ", tt, " of ", bigT,"."))
   #   x.t <- x
   #   x.t$store$A_store <- x.t$store$A_store[,tt,,]
   #   x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
-  #   out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,scal=scal,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)$posterior
+  #   out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)$posterior
   # }
   ## bind together somehow
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
@@ -122,9 +100,10 @@ irf.tvpbvar <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy
 }
 
 #' @export
-irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
+irf.bvec <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
+  cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
   if(ident=="chol-shortrun"){
     if(verbose)
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
@@ -142,7 +121,7 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
       cat("Identification schem: Identification via proxy variable.\n")
   }
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -152,9 +131,10 @@ irf.bvec <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,
 }
 
 #' @export
-irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE,
-                      eval.q=NULL){
+irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
+  cat("\nStart computing impulse response functions of Bayesian Interacted Vector Autoregression.\n\n")
   if(ident=="chol-shortrun"){
     if(verbose){
       cat("Identification scheme: Short-run identification via Cholesky decomposition.\n")
@@ -246,7 +226,7 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   x$store$Smed_store <- apply(S_store,c(1,3,4),median)
   x$store$res_store  <- res_store
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,scal=1,sign.constr=sign.constr,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,verbose=verbose)
   if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -260,8 +240,7 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
 #' @importFrom stats median
 #' @importFrom stringr str_pad
 #' @importFrom utils object.size
-.irf.generator <- function(x,n.ahead=24,ident=NULL,scal=NULL,sign.constr=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,
-                     quantiles=c(.05,.10,.16,.50,.84,.90,.95), verbose=TRUE){
+.irf.generator <- function(x,n.ahead=24,ident=NULL,shockinfo=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,quantiles=c(.05,.10,.16,.50,.84,.90,.95),verbose=TRUE){
   #------------------------------ get stuff -------------------------------------------------------#
   plag        <- x$args$plag
   xglobal     <- x$args$Data
@@ -275,168 +254,10 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   xdat        <- xglobal[(plag+1):Traw,,drop=FALSE]
   thindraws   <- x$args$thindraws
   varNames    <- colnames(xglobal)
-  #------------------------------ assign irf function  ---------------------------------------------------#
-  if(ident=="sign"){
-    # check MaxTries, if no MaxTries, set it to 7500
-    MaxTries <- 7500
-    if(!is.null(sign.constr$MaxTries)){
-      MaxTries <- sign.constr$MaxTries
-      sign.constr$MaxTries <- NULL
-    }
-    shock.nr<-length(sign.constr)
-    irf<-.irf.sign.zero
-    # first check whether all elements of sign restriction list have been specified
-    res_len<-unlist(lapply(sign.constr, function(l){
-      if(is.list(l$restrictions)){return(length(l$restrictions))}else{return(0)}
-    }))
-    varNames <- vars <- colnames(xglobal)
-    shockvar <- unlist(lapply(sign.constr,function(l)l$shock))
-    for(m in 1:shock.nr){
-      aux<-sign.constr[[m]]
-      if(!all(c("shock","restrictions","sign","rest.horz")%in%names(aux))){
-        stop("Please specify for the object 'sign.contr' slots labeled 'shock', 'restrictions', 'sign', and 'rest.horz'. A slot 'scal' is optional. See the help files for more information.")
-      }
-      mm<-1+length(aux$restrictions) # one for the shock, rest for the restrictions
-      if(length(aux$sign)!=mm || length(aux$rest.horz)!=mm){
-        stop("Please specify M +1 signs, rest.horz and constr with M denoting the nr. of restrictions.")
-      }
-      if(!any(unlist(aux$restrictions)%in%varNames) && !is.null(aux$restrictions)){
-        stop("Please restrict variables available in the dataset. Respecify.")
-      }
-      #-------------------------------------------------------
-      sign.constr[[m]]$restrictions <- as.character(unlist(sign.constr[[m]]$restrictions))
-    }
-    names(sign.constr) <- paste("shock",seq(1,length(sign.constr)),sep="")
-    for(m in 1:length(sign.constr)){
-      if(any(sign.constr[[m]]$sign=="ratio.H"|sign.constr[[m]]$sign=="ratio.avg")){
-        ratios <- which(sign.constr[[m]]$sign=="ratio.H"|sign.constr[[m]]$sign=="ratio.avg")
-        temp.restr <- sign.constr[[m]]$restrictions[ratios-1]
-        temp.signs <- sign.constr[[m]]$sign[ratios]
-        temp.horiz <- sign.constr[[m]]$rest.horz[ratios]
-        temp.list  <- list(restrictions=c(),
-                           sign=c(),
-                           rest.horz=c())
-        for(ii in 1:length(ratios)){
-          var_exp  <- temp.restr[ii]
-          var_real <- strsplit(temp.restr[ii],"_")[[1]][1]
-          if(temp.signs[ii]=="ratio.avg"){
-            horizons <- seq(2,temp.horiz[ii]) # not on impact
-          }else if(temp.signs[ii]=="ratio.H"){
-            horizons <- temp.horiz[ii]
-          }
-          #### 0 restriction on expectations
-          temp.list$restrictions <- c(temp.list$restrictions,var_exp)
-          temp.list$sign         <- c(temp.list$sign,"0")
-          temp.list$rest.horz    <- c(temp.list$rest.horz,1)
-          #### -1 restriction indicates sum
-          if(length(horizons)==1){
-            temp.list$restrictions <- c(temp.list$restrictions,var_real)
-            temp.list$sign         <- c(temp.list$sign,"-1")
-            temp.list$rest.horz    <- c(temp.list$rest.horz,horizons)
-          } else if(length(horizons)>1){ ### -1/H restriction indicates average
-            temp.list$restrictions <- c(temp.list$restr,rep(var_real,length(horizons)))
-            share <- as.character(-1/length(horizons))
-            temp.list$sign         <- c(temp.list$sign,rep(share,length(horizons)))
-            temp.list$rest.horz    <- c(temp.list$rest.horz,horizons)
-          }
-        }
-        # kick old stuff
-        sign.constr[[m]]$restrictions <- sign.constr[[m]]$restrictions[-c(ratios-1)]
-        sign.constr[[m]]$sign <- sign.constr[[m]]$sign[-ratios]
-        sign.constr[[m]]$rest.horz <- sign.constr[[m]]$rest.horz[-ratios]
-        # get new stuff in
-        sign.constr[[m]]$restrictions <- c(sign.constr[[m]]$restrictions,temp.list$restrictions)
-        sign.constr[[m]]$sign <- c(sign.constr[[m]]$sign,temp.list$sign)
-        sign.constr[[m]]$rest.horz <- c(sign.constr[[m]]$rest.horz,temp.list$rest.horz)
-      }else if(any(sign.constr[[m]]$sign=="0")){
-        zeros <- which(sign.constr[[m]]$sign=="0")
-        temp.restr  <- sign.constr[[m]]$restrictions[zeros-1]
-        temp.signs  <- sign.constr[[m]]$sign[zeros]
-        temp.horiz  <- sign.constr[[m]]$rest.horz[zeros]
-        temp.constr <- sign.constr[[m]]$constr[zeros]
-        temp.list   <- list(restrictions=c(),
-                            sign=c(),
-                            rest.horz=c())
-        for(ii in 1:length(zeros)){
-          var_zero <- temp.restr[ii]
-          horizons <- seq(1,temp.horiz[ii])
-          #### 0 restriction on expectations
-          temp.list$restrictions <- c(temp.list$restrictions,rep(var_zero,length(horizons)))
-          temp.list$sign         <- c(temp.list$sign,rep("0",length(horizons)))
-          temp.list$rest.horz    <- c(temp.list$rest.horz,horizons)
-        }
-        # kick old stuff
-        sign.constr[[m]]$restrictions <- sign.constr[[m]]$restrictions[-c(zeros-1)]
-        sign.constr[[m]]$sign <- sign.constr[[m]]$sign[-zeros]
-        sign.constr[[m]]$rest.horz <- sign.constr[[m]]$rest.horz[-zeros]
-        # get new stuff in
-        sign.constr[[m]]$restrictions <- c(sign.constr[[m]]$restrictions,temp.list$restrictions)
-        sign.constr[[m]]$sign <- c(sign.constr[[m]]$sign,temp.list$sign)
-        sign.constr[[m]]$rest.horz <- c(sign.constr[[m]]$rest.horz,temp.list$rest.horz)
-      }else if(any(sign.constr[[m]]$sign==">"|sign.constr[[m]]$sign=="<")){
-        signs <- which(sign.constr[[m]]$sign==">"|sign.constr[[m]]$sign=="<")
-        if(any(signs==1)){
-          temp.restr <- c(sign.constr[[m]]$shock,sign.constr[[m]]$restrictions[signs-1])
-          first <- TRUE
-        }else{
-          temp.restr <- sign.constr[[m]]$restrictions[signs-1]
-        }
-        temp.signs <- sign.constr[[m]]$sign[signs]
-        temp.horiz <- sign.constr[[m]]$rest.horz[signs]
-        temp.list  <- list(restrictions=c(),
-                           sign=c(),
-                           rest.horz=c())
-        for(ii in 1:length(signs)){
-          var_horz <- seq(1,temp.horiz[ii])
-          temp.list$restrictions <- c(temp.list$restrictions,
-                                      rep(temp.restr[ii],length(var_horz)))
-          temp.list$sign         <- c(temp.list$sign,
-                                      rep(temp.signs[ii],length(var_horz)))
-          temp.list$rest.horz    <- c(temp.list$rest.horz,var_horz)
-        }
-        # kick old stuff
-        sign.constr[[m]]$restrictions <- sign.constr[[m]]$restrictions[-c(signs-1)]
-        sign.constr[[m]]$sign         <- sign.constr[[m]]$sign[-signs]
-        sign.constr[[m]]$rest.horz    <- sign.constr[[m]]$rest.horz[-signs]
-        # get new stuff in
-        if(first){
-          sign.constr[[m]]$restrictions <- c(sign.constr[[m]]$restrictions,
-                                             temp.list$restrictions[-1])
-        }else{
-          sign.constr[[m]]$restrictions <- c(sign.constr[[m]]$restrictions,
-                                             temp.list$restrictions)
-        }
-        sign.constr[[m]]$sign         <- c(sign.constr[[m]]$sign,
-                                           temp.list$sign)
-        sign.constr[[m]]$rest.horz    <- c(sign.constr[[m]]$rest.horz,
-                                           temp.list$rest.horz)
-      }
-    }
-    strg.list <- NULL
-  }else if(ident=="chol-shortrun"){
-    irf <- .irf.chol
-    type <- "short-run"
-    if(is.null(scal)) scal <- 1
-    if(length(scal)==1) scal <- rep(scal,bigK)
-    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
-  }else if(ident=="girf"){
-    irf <- .irf.girf
-    if(is.null(scal)) scal <- 1
-    if(length(scal)==1) scal <- rep(scal,bigK)
-    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
-  }else if(ident=="chol-longrun"){
-    irf <- .irf.chol
-    type <- "long-run"
-    if(is.null(scal)) scal <- 1
-    if(length(scal)==1) scal <- rep(scal,bigK)
-    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-NULL
-  }else if(ident=="proxy"){
-    irf <- .irf.proxy
-    if(is.null(scal)) scal <- 1
-    if(length(scal)==1) scal <- rep(scal,bigK)
-    MaxTries<-str<-sign.constr<-rot.nr<-Rmed<-type<-NULL
-    if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
-  }
+  MaxTries    <- 7500
+  Rmed        <- NULL
+  type        <- NULL
+  rot.nr      <- NULL
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {
@@ -453,6 +274,51 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
     }
   }
   if(is.null(cores)) {cores <- 1}
+  #------------------------------ assign irf function  ----------------------------------------------------#
+  if(ident=="sign"){
+    irf.fun<-.irf.sign.zero
+    # adjust for rationality conditions
+    if(any(shockinfo$sign=="ratio.H")){
+      idx <- which(shockinfo$sign=="ratio.H")
+      for(ii in idx){
+        Kshock <- nrow(shockinfo)
+        shockinfo[(Kshock+1):(Kshock+2),] <- NA
+        shockinfo$shock[(Kshock+1):nrow(shockinfo)] <- rep(shockinfo$shock[ii],2)
+        shockinfo$restrictions[(Kshock+1):nrow(shockinfo)] <- c(shockinfo$restrictions[ii], strsplit(shockinfo$restrictions[ii],"_")[[1]][1])
+        shockinfo$sign[(Kshock+1):nrow(shockinfo)] <- c("0","-1")
+        shockinfo$horizon[(Kshock+1):nrow(shockinfo)] <- c(1,13)
+        shockinfo$scal[(Kshock+1):nrow(shockinfo)] <- rep(shockinfo$scal[ii],2)
+      }
+      shockinfo <- shockinfo[-idx,]
+      rownames(shockinfo)<-seq(1,nrow(shockinfo))
+    }
+    if(any(shockinfo$sign=="ratio.avg")){
+      idx <- which(shockinfo$sign=="ratio.avg")
+      for(ii in idx){
+        Kshock <- nrow(shockinfo)
+        Mshock <- as.numeric(shockinfo$horizon[ii])
+        shockinfo[(Kshock+1):(Kshock+Mshock),] <- NA
+        shockinfo$shock[(Kshock+1):nrow(shockinfo)] <- rep(shockinfo$shock[ii],Mshock)
+        shockinfo$restrictions[(Kshock+1):nrow(shockinfo)] <- c(shockinfo$restrictions[ii],rep(strsplit(shockinfo$restrictions[ii],"_")[[1]][1],Mshock-1))
+        shockinfo$sign[(Kshock+1):nrow(shockinfo)] <- c("0",rep(-1/(Mshock-1),Mshock-1))
+        shockinfo$horizon[(Kshock+1):nrow(shockinfo)] <- seq(1,Mshock)
+        shockinfo$scal[(Kshock+1):nrow(shockinfo)] <- rep(shockinfo$scal[ii],Mshock)
+      }
+      shockinfo <- shockinfo[-idx,]
+      rownames(shockinfo)<-seq(1,nrow(shockinfo))
+    }
+  }else if(ident%in%c("chol","chol-shortrun")){
+    irf.fun <- .irf.chol
+    type="short-run"
+  }else if(ident=="girf"){
+    irf.fun <- .irf.girf
+  }else if(ident=="chol-longrun"){
+    irf.fun <- .irf.chol
+    type="short-run"
+  }else if(ident=="proxy"){
+    irf.fun <- .irf.proxy
+    if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
+  }
   #--------------------------------------------------------------------------------------------------------#
   # initialize objects to save IRFs, HDs, etc.
   R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
@@ -468,10 +334,9 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
     Emat <- E_large[irep,,]
-    imp.obj    <- irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,sign.constr=sign.constr,
-                      MaxTries=MaxTries,type=type,Emat=Emat,proxy=proxy)
+    imp.obj    <- irf.fun(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shockinfo=shockinfo,MaxTries=MaxTries,type=type,Emat=Emat)
     if(verbose){
-      if(!is.null(sign.constr)){
+      if(!is.null(shockinfo)){
         if(!any(is.null(imp.obj$rot))){
           cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": rotation found after ",imp.obj$icounter," tries", "\n")
         }else{
@@ -510,25 +375,23 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   }
   # Normalization
   if(thindraws>0){
-    for(z in 1:bigK){
-      Mean<-IRF_store[,1,z,z]
-      for(irep in 1:thindraws){
-        IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scal[z]
-      }
-    }
     for(i in 1:bigK){
       for(q in 1:bigQ){
         imp_posterior[,,i,q]  <- apply(IRF_store[,,,i],c(2,3),quantile,quantiles[q],na.rm=TRUE)
       }
     }
+    # if(!is.null(scal)){
+    #   for(irep in 1:thindraws){
+    #     for(mm in 1:M) IRF_store[irep,,,mm] <- (IRF_store[irep,,,mm]/IRF_store[irep,1,mm,mm])*scal[mm]
+    #   }
+    # }
   }
   # calculate objects needed for HD and struc shock functions later---------------------------------------------
   # median quantitities
   Amat    <- apply(A_large,c(2,3),median)
   Smat    <- apply(S_large,c(2,3),median)
   if(ident=="sign"){
-    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,
-                          sign.constr=sign.constr,MaxTries=MaxTries,shock.nr=shock.nr),silent=TRUE)
+    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shockinfo=shockinfo,MaxTries=MaxTries),silent=TRUE)
     if(!is(imp.obj,"try-error")){
       Rmed<-imp.obj$rot
     }else{
@@ -541,7 +404,7 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
   out <- structure(list("posterior"   = imp_posterior,
                         "ident"       = ident,
                         "rot.nr"      = rot.nr,
-                        "sign.constr" = sign.constr,
+                        "shockinfo"   = shockinfo,
                         "struc.obj"   = struc.obj,
                         "model.obj"   = model.obj),
                    class="bvar.irf")
@@ -553,41 +416,138 @@ irf.bivar <- function(x,n.ahead=24,ident=NULL,scal=1,sign.constr=NULL,proxy=NULL
 
 #' @name .irf.checks
 #' @noRd
-.irf.checks <- function(x, n.ahead, ident, scal, sign.constr, proxy){
-  # checks general
+.irf.checks <- function(x=x, n.ahead=n.ahead, ident=ident, shockinfo=shockinfo, save.store=save.store, quantiles=quantiles){
+  #-----------------------------------------------------------------------------------------------------#
+  # check arguments
+  if(!is.numeric(n.ahead) || n.ahead<1){
+    stop("Please provide 'n.ahead' as numeric bigger than zero.")
+  }
   if(is.null(ident)){
     stop("Please provide preferred identification scheme.")
   }
-  # checks identification via sign restrictions
-  if(!is.null(sign.constr)){
-    if(ident!="sign"){
-      stop("Please select 'sign' as identification scheme when providing a list of sign restrictions.")
+  if(!(ident%in%c("chol","chol-shortrun","chol-longrun","sign","proxy","girf"))){
+    stop("Chosen identification scheme not available. Please respecify.")
+  }
+  if(!is.logical(save.store)){
+    stop("Please provide argument 'save.store' as logical. Respecify.")
+  }
+  if(any(quantiles<0||quantiles>1)){
+    stop("Please specify quantiles within 0 and 1.")
+  }
+  #-----------------------------------------------------------------------------------------------------#
+  # check shockinfo argument for different identification schemes
+  if(ident=="chol-shortrun"){
+    # no checks
+  }else if(ident=="chol-longrun"){
+    # no checks
+  }else if(ident=="girf"){
+    # no checks
+  }else if(ident=="sign"){
+    if(!all(c("shock","restrictions","sign","horizon","scale")%in%colnames(shockinfo))){
+      stop("Please provide columns 'shock', 'restrictions', 'sign', 'horizon' and 'scal' in dataframe 'shockinfo'.")
     }
-    # check whether sign restriction list is correctly specified, for each shock have to specify
-    tt<-all(sapply(lapply(sign.constr,names),function(x) all(c("shock","sign","restrictions")%in%x)))
-    if(!tt){
-      stop("For each shock (i.e., first layer in the list), please specify lists named shock, sign and restrictions. See the details and examples in the manual.")
+    vars<-colnames(x$args$Data)
+    if(!(all(shockinfo$shock%in%vars) && all(shockinfo$restrictions%in%vars))){
+      stop("Please provide in columns 'shock' and 'restrictions' of 'shockinfo' only variable names available in dataset used for estimation.")
     }
-    # check scaling, if no scaling, set it to 1
-    M <- ncol(x$args$Data)
-    if(is.null(scal)) scal <- 1
-    if(length(scal)!=M) scal <- rep(scal,M)
-    type <- sign.constr$type
-    if(is.null(type)) type <- "short-run"
-    # check signs horizons
-    hh<-unlist(lapply(sign.constr,function(l)l$rest.horz))
-    if(any(hh==0)){
-      stop("Please provide contemporanous signs as horizon==1.")
+    if(!any(shockinfo$sign%in%c(">","<","0","ratio.H","ratio.avg"))){
+      stop("Misspecification in 'sign'. Only the following is allowed: <, >, 0, ratio.H, ratio.avg")
     }
-    if(any(hh>n.ahead)){
-      stop("Do not restrict anything after the impulse response horizon given by 'n.ahead'.")
+  }else if(ident=="proxy"){
+    if(!is.matrix(shockinfo)){
+      stop("Please provide with argument 'shockinfo' matrix with instruments.")
+    }
+    if(nrow(shockinfo)!=nrow(x$xglobal)){
+      stop("Provide argument 'shockinfo' containing a matrix with same length as dataset used for estimation.")
     }
   }
-  # checks for proxy
-  if(ident=="proxy"){
-    if(nrow(proxy)!=nrow(x$xglobal)){
-      stop("Provide 'proxy' with same length as dataset.")
-    }
+}
+
+
+#' @name get_shockinfo
+#' @title Create 'shockinfo' dataframe
+#' @details Small helper function that creates a dataframe called 'shockinfo' which can be directly used to apply sign restrictions.
+#' @usage get_shockinfo()
+#' @export
+get_shockinfo <- function(){
+  # if(ident=="chol")
+  #   return(data.frame(shock=NA,scal=NA))
+  #if(ident=="sign")
+    return(data.frame(shock=NA,restrictions=NA,sign=NA,horizon=NA,scale=NA,info=NA))
+}
+
+#' @name add_shockinfo
+#' @title Adding shocks
+#' @details Function that helps to easily add shocks to 'shockinfo' collecting all sign restrictions.
+#' @usage add_shockinfo(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL, scale=NULL)
+#' @param shockinfo Dataframe to append shocks. If \code{NULL} dataframe will be created.
+#' @param shock Variable of structural shock. Only possible to add restrictions to one structural shock at a time.
+#' @param restrictions Possible more than one variable which should be sign-restricted.
+#' @param sign Possible more than one sign with which restrictions should be restricted.
+#' @param horizon Possible more than one horizon with which restrictions should be restricted.
+#' @param scale Scaling parameter, either positive (=1) or negative (=-1).
+#' @export
+add_shockinfo <- function(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL, scale=1, horizon.fillup=TRUE){
+  if(is.null(shockinfo)){
+    shockinfo <- get_shockinfo()
   }
+  if(is.null(shock)){
+    stop("Please specify structural shock. This corresponds to the variable the shock is originating from.")
+  }
+  if(length(shock)>1){
+    stop("Please only specify one structural shock at once.")
+  }
+  if(is.null(restrictions) || is.null(sign)){
+    stop("Please specify 'restrictions' together with 'sign'.")
+  }
+  if(length(restrictions)!=length(sign) || length(restrictions)!=length(horizon) || length(sign)!=length(horizon)){
+    if(length(horizon)!=1) stop("Please provide the arguments 'restrictions' and 'sign' with equal length. Please respecify.")
+  }
+  nr <- length(sign)
+  if(!(is.null(restrictions) && is.null(sign)) && is.null(horizon)){
+    warning("No horizon specified, is set to one, i.e., a shock restriction on impact.")
+    horizon <- rep(1,nr)
+  }
+  if(!any(sign%in%c(">","<","0","ratio.H","ratio.avg"))){
+    stop("Misspecification in 'sign'. Only the following is allowed: <, >, 0, ratio.H, ratio.avg")
+  }
+  if(is.null(scale)){
+    warning("Scaling is not specified, set positive.")
+    scale <- rep(1,nr)
+  }
+  if(length(scale)==1) scale <- rep(scale,nr)
+  scale <- sign(scale)
+  if(length(unique(scale))>1){
+    warning("Different scaling supplied. Set to default value: positive.")
+    scale <- rep(1,nr)
+  }
+  if(length(horizon)==1 && length(horizon)<nr){
+    warning("Only one horizon specified, is used for all horizons.")
+    horizon <- rep(horizon,nr)
+  }
+  # if horizon is bigger than one
+  idx_nr <- which(!(sign%in%c("ratio.H","ratio.avg")))
+  idx_r  <- which(sign%in%c("ratio.H","ratio.avg"))
+  if(any(horizon[idx_nr]>1) && horizon.fillup){
+    repetition <- c(horizon[idx_nr],rep(1,length(idx_r)))
+    restrictions <- rep(restrictions, repetition)
+    sign <- rep(sign, repetition)
+    scale <- rep(scale, repetition)
+    horizon <- c(unlist(sapply(horizon[idx_nr],seq)),horizon[idx_r])
+  }
+  nr <- length(sign)
+  # add to shockinfo
+  nt<-ifelse(all(is.na(shockinfo)),0,nrow(shockinfo))
+  for(nn in 1:nr){
+    shockinfo[nt+nn,] <- NA
+    shockinfo$shock[nt+nn] <- shock
+    shockinfo$restrictions[nt+nn] <- restrictions[nn]
+    shockinfo$sign[nt+nn] <- sign[nn]
+    shockinfo$horizon[nt+nn] <- horizon[nn]
+    shockinfo$scale[nt+nn] <- scale[nn]
+  }
+  # delete duplicate lines
+  shockinfo<-shockinfo[!duplicated(shockinfo),]
+  return(shockinfo)
 }
 

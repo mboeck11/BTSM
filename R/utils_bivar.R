@@ -36,7 +36,7 @@
   }
   J_store <- bivar$J_store
   if(SV){
-    volatilde_store <- bivar$Sv_store; dimnames(vola_store) <- list(NULL,NULL,colnames(Y))
+    volatilde_store <- bivar$Sv_store; dimnames(volatilde_store) <- list(NULL,NULL,colnames(Y))
     parstilde_store <- bivar$pars_store
   }else{
     volatilde_store <- bivar$Sv_store; parstilde_store <- NULL;
@@ -192,7 +192,7 @@
   for(ii in 1:p) nameslags <- c(nameslags,paste0(names,".lag",ii))
   colnames(Ylag) <- nameslags
 
-  DYlag <- hadamard.prod(matrix(Ylag,Traw,Ki*M*plag),matrix(Draw,Traw,Ki*M*plag))
+  DYlag <- hadamard.prod(matrix(Ylag,Traw,Ki*M*p),matrix(Draw,Traw,Ki*M*p))
   colnames(DYlag) <- paste0("D",nameslags)
 
   DYraw <- matrix(NA,Traw,Ki1*M)

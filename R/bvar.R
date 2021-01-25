@@ -154,7 +154,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
   xglobal    <- Yraw[1:(nrow(Yraw)-h),,drop=FALSE]
   args$time  <- args$time[1:(length(args$time)-h)]
   #------------------------------ prepare applyfun --------------------------------------------------------#
-  if(is.null(applyfun)) {
+  if(is.null(applyfun)){
     applyfun <- if(is.null(cores)) {
       lapply
     } else {

@@ -1,7 +1,7 @@
 #' @name .irf.sign.zero
 #' @noRd
 #' @importFrom MASS Null
-.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,shock,sign.constr,MaxTries,...){
+.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,shockinfo,MaxTries,...){
   bigT     <- nrow(xdat)
   bigK     <- ncol(xdat)
   varNames <- colnames(xdat)
@@ -23,9 +23,9 @@
   }
   PHI  <-  PHIx[,,(plag+1):(plag+n.ahead+1)]
   #-----------------------------------------------------------------------------
-  sign.horizon   <- unique(unlist(lapply(sign.constr, function(l) l$rest.horz)))-1 # zero impact is coded as 1
+  sign.horizon   <- unique(shockinfo$horizon)
   sign.horizon   <- sort(sign.horizon, decreasing=FALSE)
-  sign.shockvars <- unlist(lapply(sign.constr, function(l) l$shock))
+  sign.shockvars <- unique(shockinfo$shock)
   H.restr        <- length(sign.horizon)
   N.restr        <- bigK*H.restr
   S.cube         <- array(NA, c(N.restr, N.restr, bigK)) # sign restrictions
@@ -38,15 +38,13 @@
     S.temp <- matrix(0, N.restr, N.restr)
     Z.temp <- matrix(0, N.restr, N.restr)
     if(varNames[vv]%in%sign.shockvars){
-      sign.shock <- sign.constr[[which(sign.shockvars == varNames[vv])]]$shock
-      sign.restr <- sign.constr[[which(sign.shockvars == varNames[vv])]]$restrictions
-      sign.signs <- sign.constr[[which(sign.shockvars == varNames[vv])]]$sign
-      sign.horiz <- sign.constr[[which(sign.shockvars == varNames[vv])]]$rest.horz-1
-
-      sign.restr <- c(sign.shock,sign.restr) ## append positive shock on shock variable
+      idx <- which(shockinfo$shock==varNames[vv])
+      sign.restr <- shockinfo$restrictions[idx]
+      sign.signs <- shockinfo$sign[idx]
+      sign.horiz <- shockinfo$horizon[idx]
 
       s.point <- which(sign.signs=="<"|sign.signs==">")
-      z.point <- seq(1,length(sign.signs))[-s.point]
+      z.point <- seq(1,length(idx))[-s.point]
 
       if(length(s.point)>0){
         for(ss in 1:length(s.point)){
@@ -98,7 +96,7 @@
   irf.restr         <- matrix(NA, N.restr, bigK)
   for(hh in 1:H.restr){
     # ARRW: Definition 1
-    if(sign.horizon[hh]!=Inf) irf.hh<-PHI[,,sign.horizon[hh]+1]%*%P0G
+    if(sign.horizon[hh]!=Inf) irf.hh<-PHI[,,sign.horizon[hh]]%*%P0G
     # ARRW: Definition 2
     #if(sign.horizon[hh]==Inf) irf.hh <- solve(A0-A0%*%Cm[1:M,]%*%do.call("rbind",rep(list(diag(M)),p)))
     irf.restr[((hh-1)*bigK+1):(bigK*hh),1:bigK] <- irf.hh
@@ -151,20 +149,9 @@
     rownames(irf.check) <- paste(rep(varNames,H.restr),".",rep(sign.horizon,each=bigK),sep="")
 
     for(ss in 1:bigK){
-      STemp <- S.cube[,,ss]
+      STemp <- as.matrix(diag(S.cube[,,ss]))
       IrfCheckTemp <- irf.check[,ss,drop = FALSE]
-      signCheckVec <- matrix(NA, N.restr, 1)
-      rownames(signCheckVec) <- paste(rep(varNames,H.restr),".",rep(sign.horizon,each=bigK),sep="")
-      for(kk in 1:N.restr){
-        STempRow <- STemp[kk,]
-        emptyCheck <- sum(STempRow)
-        if(emptyCheck == 0){
-          signCheckVec[kk,1] <- 1;
-        }else{
-          signCheckVec[kk,1] <- as.numeric(STempRow%*%IrfCheckTemp)
-        }
-      }
-      signCheck[ss,] <- prod((signCheckVec > 0)*(signCheckVec > 0))
+      signCheck[ss,] <- t(sign(IrfCheckTemp))%*%STemp==sum(abs(STemp))
     }
     condall <- prod(signCheck)
     icounter <- icounter + 1

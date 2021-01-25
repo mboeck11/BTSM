@@ -71,6 +71,8 @@
     }
   }else if(prior=="NC"){
     Smed_store  <- bvar$S_store
+    L_store    <- array(NA,c(draws/thin,M,M))
+    vola_store <- array(NA,c(draws/thin,bigT,M))
     for(irep in 1:(draws/thin)){
       for(tt in 1:bigT){
         S_store[irep,tt,,] <- bvar$S_store[irep,,]
