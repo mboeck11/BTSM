@@ -174,10 +174,6 @@ tvpbvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="TVP",SV=TRUE,h=0,thi
   }
   #------------------------------ estimate BVAR ---------------------------------------------------------------#
   if(verbose) cat("\nEstimation of model starts...\n")
-  # sourceCpp("./src/threshold_functions.cpp")
-  # sourceCpp("./src/do_rgig1.cpp")
-  # sourceCpp("../../../../PACKAGES/BTSM/src/threshold_functions.cpp")
-  # sourceCpp("../../../../PACKAGES/BTSM/src/do_rgig1.cpp")
   globalpost <- .TVPBVAR_linear_wrapper(Yraw=Yraw,prior=prior,plag=plag,draws=draws,burnin=burnin,cons=cons,trend=trend,SV=SV,thin=thin,default_hyperpara=default_hyperpara,Ex=Ex,applyfun=applyfun,cores=cores,eigen=eigen,trim=trim)
   args$Y <- globalpost$Y
   args$X <- globalpost$X

@@ -129,7 +129,7 @@ bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,
                             Bsigma=1, a0=25, b0=1.5, bmu=0, Bmu=100^2, # SV hyper parameter
                             shrink1=0.1,shrink2=0.2,shrink3=10^2, # MN
                             tau0=.1,tau1=3,kappa0=0.1,kappa1=7,p_i=0.5,q_ij=0.5,   # SSVS
-                            e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=FALSE,a_log=TRUE,
+                            e_lambda=0.01,d_lambda=0.01,a_start=0.7,sample_A=TRUE,a_log=TRUE,
                             use_R=FALSE) # NG
   paras     <- c("c","a_1","b_1","prmean","Bsigma_sv","a0","b0","bmu","Bmu","shrink1","shrink2","shrink3",
                  "tau0","tau1","kappa0","kappa1","p_i","q_ij","e_lambda","d_lambda","a_log","a_start","sample_A","use_R")

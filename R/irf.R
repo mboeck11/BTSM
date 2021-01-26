@@ -52,7 +52,7 @@ irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE
 
 #' @export
 irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
-                        quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
+                        quantiles=c(.05,.10,.16,.50,.84,.90,.95), period="med", ...){
   start.irf <- Sys.time()
   cat("\nStart computing impulse response functions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
   if(ident=="chol-shortrun"){
@@ -71,6 +71,8 @@ irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FA
     if(verbose)
       cat("Identification schem: Identification via proxy variable.\n")
   }
+  #------------ check ----------------------------#
+  if(length(period)!=1) stop("Please provide argument 'period' with length 1.")
   #------------ get data -------------------------#
   Y    <- x$args$Y
   bigT <- nrow(Y)
@@ -79,17 +81,26 @@ irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FA
   #-------------------------------------------------------------------------------------------------------#
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
   # median response
-  x.med <- x
-  x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
-  out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
-  # out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
-  # for(tt in 1:bigT){
-  #   if(verbose) cat(paste0("Time point: ", tt, " of ", bigT,"."))
-  #   x.t <- x
-  #   x.t$store$A_store <- x.t$store$A_store[,tt,,]
-  #   x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
-  #   out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)$posterior
-  # }
+  if(period=="med"){
+    x.med <- x
+    x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
+    out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
+  }else if(period%in%seq(bigT)){
+    tt <- as.numeric(period)
+    if(verbose) cat(paste0("Time point: ", tt, " of ", bigT,".\n"))
+    x.t <- x
+    x.t$store$A_store <- x.t$store$A_store[,tt,,]
+    x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
+    out <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)$posterior
+  }else if(period=="full"){
+    out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
+    for(tt in 1:bigT){
+      x.t <- x
+      x.t$store$A_store <- x.t$store$A_store[,tt,,]
+      x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
+      out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=FALSE)$posterior
+    }
+  }
   ## bind together somehow
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
@@ -258,6 +269,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   Rmed        <- NULL
   type        <- NULL
   rot.nr      <- NULL
+  proxy       <- NULL
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {
@@ -317,7 +329,13 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
     type="short-run"
   }else if(ident=="proxy"){
     irf.fun <- .irf.proxy
-    if(nrow(proxy)==Traw) proxy <- proxy[(plag+1):Traw,,drop=FALSE]
+    if(nrow(shockinfo)==Traw){
+      proxy <- shockinfo[(plag+1):Traw,,drop=FALSE]
+    }else if(nrow(shockinfo)==bigT){
+      proxy <- shockinfo
+    }else{
+      stop("Please provide proxy of appropriate length!")
+    }
   }
   #--------------------------------------------------------------------------------------------------------#
   # initialize objects to save IRFs, HDs, etc.
@@ -334,14 +352,12 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
     Amat <- A_large[irep,,]
     Smat <- S_large[irep,,]
     Emat <- E_large[irep,,]
-    imp.obj    <- irf.fun(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shockinfo=shockinfo,MaxTries=MaxTries,type=type,Emat=Emat)
-    if(verbose){
-      if(!is.null(shockinfo)){
-        if(!any(is.null(imp.obj$rot))){
-          cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": rotation found after ",imp.obj$icounter," tries", "\n")
-        }else{
-          cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": no rotation found", "\n")
-        }
+    imp.obj    <- irf.fun(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,shockinfo=shockinfo,MaxTries=MaxTries,type=type,Emat=Emat,proxy=proxy)
+    if(verbose && ident=="sign"){
+      if(!any(is.null(imp.obj$rot))){
+        cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": rotation found after ",imp.obj$icounter," tries", "\n")
+      }else{
+        cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": no rotation found", "\n")
       }
     }
     return(list(impl=imp.obj$impl,rot=imp.obj$rot))
@@ -356,7 +372,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   end.comp <- Sys.time()
   diff.comp <- difftime(end.comp,start.comp,units="mins")
   mins <- round(diff.comp,0); secs <- round((diff.comp-floor(diff.comp))*60,0)
-  if(verbose) cat(paste("\nImpulse response analysis took ",mins," ",ifelse(mins==1,"min","mins")," ",secs, " ",ifelse(secs==1,"second.","seconds.\n"),sep=""))
+  if(verbose) cat(paste("\nImpulse response analysis took ",mins," ",ifelse(mins==1,"min","mins")," ",secs, " ",ifelse(secs==1,"second.\n","seconds.\n"),sep=""))
   #------------------------------ post processing  ---------------------------------------------------#
   # re-set IRF object in case we have found only a few rotation matrices
   if(ident=="sign"){
