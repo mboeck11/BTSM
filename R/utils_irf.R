@@ -251,6 +251,8 @@
     idx   <- which(is.na(proxy))
     Eest  <- Emat[-idx,,drop=FALSE]
     proxy <- proxy[-idx,,drop=FALSE]
+  }else{
+    Eest <- Emat
   }
   fitted.err <- lm(Eest[,1] ~ proxy)$fitted
   b21ib11    <- t(lm(Eest[,-1] ~ fitted.err-1)$coef)
