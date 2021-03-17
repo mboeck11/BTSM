@@ -16,7 +16,7 @@ The latest development version can be installed from GitHub.
 devtools::install_github("mboeck11/BTSM")
 ```
 
-Note that Mac OS needs gfortran binary packages to be installed. See also: https://gcc.gnu.org/wiki/GFortranBinaries.
+Note that Mac OS needs gfortran binary packages to be installed. See also: https://gcc.gnu.org/wiki/GFortranBinaries. Please make sure that you have installed all package dependencies, this can cause troubles.
 
 ## Usage
 
