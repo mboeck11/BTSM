@@ -4,3 +4,13 @@
 #' @docType package
 #' @useDynLib BTSM, .registration=TRUE
 NULL
+
+.onAttach <- function(lib, pkg) {
+  if(interactive() || getOption("verbose")){
+    packageStartupMessage(sprintf("Package %s %s attached. To cite, see citation(\"%s\").", pkg, utils::packageDescription(pkg)$Version, pkg))
+  }
+}
+
+.onUnload <- function (libpath) {
+  library.dynam.unload("BTSM", libpath)
+}
