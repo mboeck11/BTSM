@@ -2,13 +2,19 @@
 % Please edit documentation in R/irf.R
 \name{get_shockinfo}
 \alias{get_shockinfo}
-\title{Create 'shockinfo' dataframe}
+\title{Create \code{shockinfo} argument}
 \usage{
-get_shockinfo()
+get_shockinfo(ident="chol")
+}
+\arguments{
+\item{ident}{Definition of identification scheme, either \code{chol} or \code{sign}.}
 }
 \description{
-Create 'shockinfo' dataframe
+Creates dummy \code{shockinfo} argument for appropriate use in  \code{irf} function.
 }
 \details{
-Small helper function that creates a dataframe called 'shockinfo' which can be directly used to apply sign restrictions.
+Depending on the identification scheme a different \code{shockinfo} argument in the \code{irf} function is needed. To handle this convenient, an appropriate data.frame with is created with this function.
+}
+\seealso{
+\code{\link{irf}}
 }

@@ -430,7 +430,7 @@
           acc_tau <- acc_tau + 1
         }
         # scale MH proposal during the first 50% of the burn-in stage
-        if(irep<(0.5*burnin)){
+        if(irep<(0.5*nburn)){
           if((acc_xi/irep)>0.30){scale_xi <- 1.01*scale_xi}
           if((acc_xi/irep)<0.15){scale_xi <- 0.99*scale_xi}
           if((acc_tau/irep)>0.30){scale_xi <- 1.01*scale_xi}

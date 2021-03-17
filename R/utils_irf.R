@@ -1,7 +1,7 @@
 #' @name .irf.sign.zero
 #' @noRd
 #' @importFrom MASS Null
-.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,shockinfo,MaxTries,...){
+.irf.sign.zero <- function(xdat,plag,n.ahead,Amat,Smat,Emat,shockinfo,MaxTries,...){
   bigT     <- nrow(xdat)
   bigK     <- ncol(xdat)
   varNames <- colnames(xdat)
@@ -158,22 +158,24 @@
   }
 
   shock <- P0G%*%Q_bar
-
+  # computing impulse responses
   irfa  <- array(0,c(n.ahead,bigK,bigK)); dimnames(irfa)[[2]] <- dimnames(irfa)[[3]] <- varNames
   for (ihor in 1:n.ahead){
     irfa[ihor,,] <- PHI[,,ihor]%*%shock
   }
+  # computing structural errors
+  eps <- Emat%*%shock
 
   if(icounter==MaxTries){
-    irfa <- NA
+    irfa <- eps <- NA
   }
   # end rotation matrix loop ----------------------------------------------------------------------------
-  return(list(impl=irfa,rot=Q_bar,icounter=icounter))
+  return(list(impl=irfa,rot=Q_bar,eps=eps,icounter=icounter))
 }
 
 #' @name .irf.chol
 #' @noRd
-.irf.chol <- function(xdat,plag,n.ahead,Amat,Smat,type,...){
+.irf.chol <- function(xdat,plag,n.ahead,Amat,Smat,Emat,type,...){
   bigT      <- nrow(xdat)
   bigK      <- ncol(xdat)
   varNames  <- colnames(xdat)
@@ -216,8 +218,10 @@
   for (ihor in 1:n.ahead){
     irfa[ihor,,] <- PHI[,,ihor]%*%shock
   }
+  # computing structural errors
+  eps <- Emat%*%shock
 
-  out <- list(impl=irfa,rot=NULL)
+  out <- list(impl=irfa,rot=shock,eps=eps)
   return(out)
 }
 
@@ -243,8 +247,13 @@
   PHI  <-  PHIx[,,(plag+1):(plag+n.ahead+1)]
 
   # identification step
-  fitted.err <- lm(Emat[,1] ~ proxy)$fitted
-  b21ib11    <- t(lm(Emat[,-1] ~ fitted.err-1)$coef)
+  if(any(is.na(proxy))){
+    idx   <- which(is.na(proxy))
+    Eest  <- Emat[-idx,,drop=FALSE]
+    proxy <- proxy[-idx,,drop=FALSE]
+  }
+  fitted.err <- lm(Eest[,1] ~ proxy)$fitted
+  b21ib11    <- t(lm(Eest[,-1] ~ fitted.err-1)$coef)
   Sig11      <- matrix(Smat[1,1], 1, 1)
   Sig21      <- matrix(Smat[2:bigK,1],bigK-1,1)
   Sig12      <- matrix(Smat[1,2:bigK],1,bigK-1)
@@ -252,8 +261,10 @@
   ZZp        <- b21ib11%*%Sig11%*%t(b21ib11) - Sig21%*%t(b21ib11)+b21ib11%*%t(Sig21)+Sig22
   b12b12p    <- t(Sig21-b21ib11%*%Sig11)%*%solve(ZZp)%*%(Sig21-b21ib11%*%Sig11)
   b11b11p    <- Sig11 - b12b12p
+  if(b11b11p<0){
+    return(list(impl=NA,rot=NA,eps=NA))
+  }
   b11        <- sqrt(b11b11p)
-  if(is.nan(b11)) b11 <- 1e-10
   shock      <- c(b11, b21ib11*c(b11))
   shock      <- shock/shock[1] # normalize to unit shock
 
@@ -267,13 +278,15 @@
   for (ihor in 1:n.ahead){
     irfa[ihor,,] <- PHI[,,ihor]%*%Q
   }
+  # computing structural errors
+  eps <- Emat%*%Q
 
-  return(list(impl=irfa,rot=NULL))
+  return(list(impl=irfa,rot=Q,eps=eps))
 }
 
 #' @name .irf.girf
 #' @noRd
-.irf.girf <- function(xdat,plag,n.ahead,Amat,Smat, ...){
+.irf.girf <- function(xdat,plag,n.ahead,Amat,Smat,Emat,...){
   bigT      <- nrow(xdat)
   bigK      <- ncol(xdat)
   varNames  <- colnames(xdat)
@@ -296,8 +309,10 @@
   for (ihor in 1:n.ahead){
     irfa[ihor,,] <- PHI[,,ihor]%*%Smat
   }
+  # computing structural errors
+  eps <- Emat%*%Smat
 
-  return(list(impl=irfa,rot=NULL))
+  return(list(impl=irfa,rot=Smat,eps=eps))
 }
 
 #' @name .impulsdtrf

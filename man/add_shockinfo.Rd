@@ -2,26 +2,34 @@
 % Please edit documentation in R/irf.R
 \name{add_shockinfo}
 \alias{add_shockinfo}
-\title{Adding shocks}
+\title{Adding shocks to 'shockinfo' argument}
 \usage{
-add_shockinfo(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL, scale=NULL)
+add_shockinfo(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NULL, horizon=NULL,
+prob=NULL, scale=NULL, horizon.fillup=TRUE)
 }
 \arguments{
-\item{shockinfo}{Dataframe to append shocks. If \code{NULL} dataframe will be created.}
+\item{shockinfo}{Dataframe to append shocks. If \code{shockinfo=NULL} appropriate dataframe for sign-restrictions will be created.}
 
-\item{shock}{Variable of structural shock. Only possible to add restrictions to one structural shock at a time.}
+\item{shock}{String element. Variable of interest for structural shock. Only possible to add restrictions to one structural shock at a time.}
 
-\item{restrictions}{Possible more than one variable which should be sign-restricted.}
+\item{restriction}{Character vector with variables that are supposed to be sign restricted.}
 
-\item{sign}{Possible more than one sign with which restrictions should be restricted.}
+\item{sign}{Character vector with signs.}
 
-\item{horizon}{Possible more than one horizon with which restrictions should be restricted.}
+\item{horizon}{Numeric vector with horizons to which restriction should hold. Set \code{horizon.fillup} to \code{FALSE} to just restrict one specific horizon.}
 
-\item{scale}{Scaling parameter, either positive (=1) or negative (=-1).}
+\item{prob}{Number between zero and one determining the probability with which restriction is supposed to hold.}
+
+\item{scale}{Scaling parameter.}
+
+\item{horizon.fillup}{Default set to \code{TRUE}, horizon specified up to given horizon. Otherwise just one specific horizon is restricted.}
 }
 \description{
-Adding shocks
+Adds automatically rows to 'shockinfo' data.frame for appropriate use in \code{irf}.
 }
 \details{
-Function that helps to easily add shocks to 'shockinfo' collecting all sign restrictions.
+This is only possible for sign restriction, hence if \code{ident="sign"} in \code{get_shockinfo()}.
+}
+\seealso{
+\code{\link{irf}}
 }
