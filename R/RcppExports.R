@@ -3,14 +3,12 @@
 
 #' @name BVAR_linear
 #' @noRd
-#' @export
 BVAR_linear <- function(Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in) {
     .Call(`_BTSM_BVAR_linear`, Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in)
 }
 
 #' @name do_rgig1
 #' @noRd
-#' @export
 do_rgig1 <- function(lambda, chi, psi) {
     .Call(`_BTSM_do_rgig1`, lambda, chi, psi)
 }
@@ -23,20 +21,17 @@ dmvnrm_arma_fast <- function(x, mean, sigma, logd = FALSE) {
 
 #' @name loglik_C
 #' @noRd
-#' @export
 loglik_C <- function(Y_in, X_in, A_in, S_in, thindraws_in) {
     .Call(`_BTSM_loglik_C`, Y_in, X_in, A_in, S_in, thindraws_in)
 }
 
 #' @name sample_McCausland
-#' @export
 #' @noRd
 sample_McCausland <- function(ystar, Fstar) {
     .Call(`_BTSM_sample_McCausland`, ystar, Fstar)
 }
 
 #' @name MH_step
-#' @export
 #' @noRd
 MH_step <- function(current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2) {
     .Call(`_BTSM_MH_step`, current_val, c_tuning_par, d, scale_par, param_vec, b, nu, hyp1, hyp2)

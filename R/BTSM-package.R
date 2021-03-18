@@ -2,6 +2,7 @@
 #' @title BTSM: Bayesian Time Series Models
 #' @description This packages is a compendium of Bayesian Time Series Models...
 #' @docType package
+#' @importFrom stats rexp var
 #' @useDynLib BTSM, .registration=TRUE
 NULL
 

@@ -12,7 +12,6 @@ using namespace arma;
 
 //' @name BVAR_linear
 //' @noRd
-//' @export
 //[[Rcpp::export]]
 List BVAR_linear(const SEXP Y_in, const SEXP p_in,
                  const SEXP draws_in, const SEXP burnin_in,

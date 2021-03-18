@@ -5,7 +5,8 @@
 \title{Impulse Response Function}
 \usage{
 irf(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE,
-           applyfun=NULL, cores=NULL, verbose=TRUE)
+   applyfun=NULL, cores=NULL, verbose=TRUE,
+   quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...)
 }
 \arguments{
 \item{x}{object of class \code{bvar}.}

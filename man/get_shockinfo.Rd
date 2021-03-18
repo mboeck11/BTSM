@@ -4,7 +4,7 @@
 \alias{get_shockinfo}
 \title{Create \code{shockinfo} argument}
 \usage{
-get_shockinfo(ident="chol")
+get_shockinfo(ident="chol", nr_rows=1)
 }
 \arguments{
 \item{ident}{Definition of identification scheme, either \code{chol} or \code{sign}.}

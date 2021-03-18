@@ -291,7 +291,6 @@ double log_ratio_value_marginalBFS(int d, double proposal, double old_val, doubl
 }
 
 //' @name MH_step
-//' @export
 //' @noRd
 // [[Rcpp::export]]
 double MH_step(double current_val, double c_tuning_par, int d, double scale_par, arma::vec param_vec, double b, double nu,

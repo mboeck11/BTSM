@@ -168,7 +168,6 @@ arma::vec dmvnrm_arma_old(arma::mat& x,
 
 //' @name loglik_C
 //' @noRd
-//' @export
 //[[Rcpp::export]]
 List loglik_C(const SEXP Y_in, const SEXP X_in, const arma::cube A_in, const arma::cube S_in, const SEXP thindraws_in) {
   //----------------------------------------------------------------------------------------------------------------------

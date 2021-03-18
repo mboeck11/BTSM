@@ -3,7 +3,6 @@
 using namespace Rcpp;
 
 //' @name sample_McCausland
-//' @export
 //' @noRd
 // [[Rcpp::export]]
 arma::mat sample_McCausland(arma::vec ystar, arma::mat Fstar){

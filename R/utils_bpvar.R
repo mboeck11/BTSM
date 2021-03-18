@@ -139,6 +139,7 @@
 #' @importFrom magic adiag
 #' @importFrom mvtnorm rmvnorm
 #' @importFrom stochvol svsample_fast_cpp specify_priors default_fast_sv
+#' @importFrom bayesm rwishart
 .BPVAR_linear_R <- function(Y_in,p_in,draws_in,burnin_in,cons_in,trend_in,sv_in,thin_in,prior_in,hyperparam_in,Ex_in){
   #------------------------------checks----------------------------------------------#
   Yraw    <- Y_in
@@ -457,13 +458,13 @@
     if(sv){
       stop("SV currently not implemented.")
     }else{
-      C0_j <- bayesm::rwishart(N * (n0 + m0 * N), # N *
-                               1/N * chol2inv(chol(Q0 + apply(S_inv, c(1,2), sum))))$W # Flo W, 1/N *
+      C0_j <- rwishart(N * (n0 + m0 * N), # N *
+                       1/N * chol2inv(chol(Q0 + apply(S_inv, c(1,2), sum))))$W # Flo W, 1/N *
       for(cc in 1:N) {
         # following code in MS_VAR
         scale0 <- crossprod(Em[[cc]])/2 + C0_j
         v_post <- bigT[[cc]] / 2 + m0
-        S_draw[,,cc] <- bayesm::rwishart(N * v_post, 1/N * chol2inv(chol(scale0)))$IW # Flo IW, N *, 1/N *
+        S_draw[,,cc] <- rwishart(N * v_post, 1/N * chol2inv(chol(scale0)))$IW # Flo IW, N *, 1/N *
 
         S_inv[,,cc] <- solve(S_draw[,,cc])
       }

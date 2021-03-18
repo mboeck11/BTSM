@@ -1,7 +1,8 @@
 #' @name irf
 #' @title Impulse Response Function
 #' @usage irf(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE,
-#'            applyfun=NULL, cores=NULL, verbose=TRUE)
+#'    applyfun=NULL, cores=NULL, verbose=TRUE,
+#'    quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...)
 #' @param x object of class \code{bvar}.
 #' @param n.ahead forecasting horizon.
 #' @param ident preferred identification scheme.
@@ -512,7 +513,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
 #' @description Creates dummy \code{shockinfo} argument for appropriate use in  \code{irf} function.
 #' @param ident Definition of identification scheme, either \code{chol} or \code{sign}.
 #' @details Depending on the identification scheme a different \code{shockinfo} argument in the \code{irf} function is needed. To handle this convenient, an appropriate data.frame with is created with this function.
-#' @usage get_shockinfo(ident="chol")
+#' @usage get_shockinfo(ident="chol", nr_rows=1)
 #' @seealso \code{\link{irf}}
 #' @export
 get_shockinfo <- function(ident="chol", nr_rows=1){
