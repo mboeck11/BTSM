@@ -155,7 +155,7 @@
       for(pp in 1:p){ # for each lag pp
         for(j in 1:M){ # for each variable j
           if(i==j){
-            V_it[j+M*(pp-1),i,kk] <- (a_bar_1/pp^2) ### variance on own lags
+            V_it[j+M*(pp-1),i,kk] <- (a_bar_1/pp)^2 ### variance on own lags
           }else{
             V_it[j+M*(pp-1),i,kk] <- (a_bar_2/pp)^2 * (sigma_sq[i]/sigma_sq[j]) # variance on other lags
           }

@@ -4,24 +4,25 @@
 #'    applyfun=NULL, cores=NULL, verbose=TRUE,
 #'    quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...)
 #' @param x object of class \code{bvar}.
-#' @param n.ahead forecasting horizon.
-#' @param ident preferred identification scheme.
-#' @param shockinfo dataframe with specified details on shock
+#' @param n.ahead Forecasting horizon.
+#' @param ident Preferred identification scheme.
+#' @param shockinfo Dataframe with specified details on the shock.
+#' @param proxy Matrix with proxy variables.
 #' @param save.store If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.
 #' @param applyfun Allows for user-specific apply function, which has to have the same interface than \code{lapply}. If \code{cores=NULL} then \code{lapply} is used, if set to a numeric either \code{parallel::parLapply()} is used on Windows platforms and \code{parallel::mclapply()} on non-Windows platforms.
 #' @param cores Specifies the number of cores which should be used. Default is set to \code{NULL} and \code{applyfun} is used.
 #' @param verbose If set to \code{FALSE} it suppresses printing messages to the console.
 #' @export
-"irf" <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+"irf" <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                   quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   #------------------------------ do checks ---------------------------------------------------------------#
-  .irf.checks(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,quantiles=quantiles)
+  .irf.checks(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,quantiles=quantiles)
   #------------------------------ use irf method ----------------------------------------------------------#
   UseMethod("irf", x)
 }
 
 #' @export
-irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
   cat("\nStart computing impulse response functions of Bayesian Vector Autoregression.\n\n")
@@ -42,7 +43,7 @@ irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE
       cat("Identification schem: Identification via proxy variable.\n")
   }
   if(verbose) cat(paste("Start impulse response analysis on ", ifelse(is.null(cores),1,cores), " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,quantiles=quantiles,verbose=verbose)
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,quantiles=quantiles,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -52,7 +53,7 @@ irf.bvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE
 }
 
 #' @export
-irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                         quantiles=c(.05,.10,.16,.50,.84,.90,.95), period="med", ...){
   start.irf <- Sys.time()
   cat("\nStart computing impulse response functions of Time-varying Parameter Bayesian Vector Autoregression.\n\n")
@@ -85,24 +86,24 @@ irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FA
   if(period=="med"){
     x.med <- x
     x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
-    out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
+    out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,verbose=verbose)
   }else if(period%in%seq(bigT)){
     tt <- as.numeric(period)
     if(verbose) cat(paste0("Time point: ", tt, " of ", bigT,".\n"))
     x.t <- x
     x.t$store$A_store <- x.t$store$A_store[,tt,,]
     x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
-    out <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,quantiles=quantiles,verbose=verbose)$posterior
+    out <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,quantiles=quantiles,verbose=verbose)$posterior
   }else if(period=="full"){
     x.med <- x
     x.med$store$A_store <- apply(x.med$store$A_store,c(1,3,4),median)
-    out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,cores=cores,quantiles=quantiles,verbose=verbose)
+    out <- .irf.generator(x.med,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,cores=cores,quantiles=quantiles,verbose=verbose)
     out$posterior.full <- array(NA,c(bigT,n.ahead,M,M,length(quantiles)),dimnames=c(list(NULL),dimnames(out$posterior)))
     for(tt in 1:bigT){
       x.t <- x
       x.t$store$A_store <- x.t$store$A_store[,tt,,]
       x.t$store$Smed_store <- x.t$store$S_store[,tt,,]
-      out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,quantiles=quantiles,cores=cores,verbose=FALSE)$posterior
+      out$posterior.full[tt,,,,] <- .irf.generator(x.t,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,quantiles=quantiles,cores=cores,verbose=FALSE)$posterior
     }
   }
   ## bind together somehow
@@ -115,7 +116,7 @@ irf.tvpbvar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FA
 }
 
 #' @export
-irf.bvec <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+irf.bvec <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                      quantiles=c(.05,.10,.16,.50,.84,.90,.95), ...){
   start.irf <- Sys.time()
   cat("\nStart computing impulse response functions of Bayesian Vector Error Correction Model.\n\n")
@@ -136,7 +137,7 @@ irf.bvec <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE
       cat("Identification schem: Identification via proxy variable.\n")
   }
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",x$args$thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,quantiles=quantiles,verbose=verbose)
+  out <- .irf.generator(x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,quantiles=quantiles,verbose=verbose)
   cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -146,7 +147,7 @@ irf.bvec <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE
 }
 
 #' @export
-irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
+irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, save.store=FALSE, applyfun=NULL, cores=NULL, verbose=TRUE,
                       quantiles=c(.05,.10,.16,.50,.84,.90,.95), eval.q=NULL, ...){
   start.irf <- Sys.time()
   cat("\nStart computing impulse response functions of Bayesian Interacted Vector Autoregression.\n\n")
@@ -242,7 +243,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   x$store$Smed_store <- apply(S_store,c(1,3,4),median)
   x$store$res_store  <- res_store
   if(verbose) cat(paste("Start impulse response analysis on ", cores, " cores", " (",thindraws," stable draws in total).",sep=""),"\n")
-  out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,save.store=save.store,applyfun=applyfun,verbose=verbose)
+  out <- .irf.generator(x=x,n.ahead=n.ahead,ident=ident,shockinfo=shockinfo,proxy=proxy,save.store=save.store,applyfun=applyfun,verbose=verbose)
   if(verbose) cat(paste("\nSize of irf object: ", format(object.size(out),unit="MB")))
   end.irf <- Sys.time()
   diff.irf <- difftime(end.irf,start.irf,units="mins")
@@ -256,7 +257,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
 #' @importFrom stats median
 #' @importFrom stringr str_pad
 #' @importFrom utils object.size
-.irf.generator <- function(x,n.ahead=24,ident=NULL,shockinfo=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,quantiles=c(.05,.10,.16,.50,.84,.90,.95),verbose=TRUE){
+.irf.generator <- function(x,n.ahead=24,ident=NULL,shockinfo=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,quantiles=c(.05,.10,.16,.50,.84,.90,.95),verbose=TRUE){
   #------------------------------ get stuff -------------------------------------------------------#
   plag        <- x$args$plag
   xglobal     <- x$args$Data
@@ -275,7 +276,6 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   epsmed      <- NULL
   type        <- NULL
   rot.nr      <- NULL
-  proxy       <- NULL
   #------------------------------ prepare applyfun --------------------------------------------------------#
   if(is.null(applyfun)) {
     applyfun <- if(is.null(cores)) {
@@ -295,6 +295,11 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   #------------------------------ assign irf function  ----------------------------------------------------#
   if(ident=="sign"){
     irf.fun<-.irf.sign.zero
+    select_shocks <- which(varNames%in%shockinfo$shock)
+    scale <- shockinfo$scale
+    shock.nr <- length(select_shocks)
+    if(shock.nr == 0)
+      stop("Please provide shock in the dataset. Respecify 'shockinfo' argument.")
     # adjust for rationality conditions
     if(any(shockinfo$sign=="ratio.H")){
       idx <- which(shockinfo$sign=="ratio.H")
@@ -327,19 +332,34 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
       rownames(shockinfo)<-seq(1,nrow(shockinfo))
     }
   }else if(ident%in%c("chol","chol-shortrun")){
+    select_shocks <- which(varNames%in%shockinfo$shock)
+    shock.nr <- length(select_shocks)
+    if(shock.nr == 0)
+      stop("Please provide shock in the dataset. Respecify 'shockinfo' argument.")
+    scale <- shockinfo$scale
     irf.fun <- .irf.chol
     type="short-run"
   }else if(ident=="girf"){
     irf.fun <- .irf.girf
   }else if(ident=="chol-longrun"){
+    select_shocks <- which(varNames%in%shockinfo$shock)
+    shock.nr <- length(select_shocks)
+    if(shock.nr == 0)
+      stop("Please provide shock in the dataset. Respecify 'shockinfo' argument.")
+    scale <- shockinfo$scale
     irf.fun <- .irf.chol
     type="short-run"
   }else if(ident=="proxy"){
+    select_shocks <- which(varNames%in%shockinfo$shock)
+    shock.nr <- length(select_shocks)
+    if(shock.nr == 0)
+      stop("Please provide shock in the dataset. Respecify 'shockinfo' argument.")
+    scale <- shockinfo$scale
     irf.fun <- .irf.proxy
-    if(nrow(shockinfo)==Traw){
-      proxy <- shockinfo[(plag+1):Traw,,drop=FALSE]
-    }else if(nrow(shockinfo)==bigT){
-      proxy <- shockinfo
+    if(nrow(proxy)==Traw){
+      proxy <- proxy[(plag+1):Traw,,drop=FALSE]
+    }else if(nrow(proxy)==bigT){
+      proxy <- proxy
     }else{
       stop("Please provide proxy of appropriate length!")
     }
@@ -349,11 +369,6 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
   R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
   IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
   eps_store     <- array(NA, dim=c(thindraws,bigT,bigK));dimnames(eps_store)[[3]]<-varNames
-  imp_posterior <- array(NA, dim=c(n.ahead,bigK,bigK,bigQ))
-  dimnames(imp_posterior)[[1]] <- 1:n.ahead
-  dimnames(imp_posterior)[[2]] <- colnames(xglobal)
-  dimnames(imp_posterior)[[3]] <- paste("shock",colnames(xglobal),sep="_")
-  dimnames(imp_posterior)[[4]] <- paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")
   #------------------------------ start computing irfs  ---------------------------------------------------#
   start.comp <- Sys.time()
   imp.obj <- applyfun(1:thindraws,function(irep){
@@ -413,18 +428,21 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
     eps_store <- eps_store[idx,,,drop=FALSE]
     thindraws <- length(idx)
   }
+  # Subset to shocks under consideration
+  IRF_store <- IRF_store[,,,select_shocks,drop=FALSE]
+  imp_posterior <- array(NA, dim=c(n.ahead,bigK,shock.nr,bigQ),
+                         dimnames=list(1:n.ahead, colnames(xglobal),paste("shock",colnames(xglobal)[select_shocks],sep="_"),
+                                       paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")))
   # Normalization
-  if(thindraws>0){
-    for(i in 1:bigK){
-      for(q in 1:bigQ){
-        imp_posterior[,,i,q]  <- apply(IRF_store[,,,i],c(2,3),quantile,quantiles[q],na.rm=TRUE)
-      }
+  for(z in 1:shock.nr)
+  {
+    Mean<-IRF_store[,1,select_shocks[z],z]
+    for(irep in 1:thindraws){
+      IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scale[z]
     }
-    # if(!is.null(scal)){
-    #   for(irep in 1:thindraws){
-    #     for(mm in 1:M) IRF_store[irep,,,mm] <- (IRF_store[irep,,,mm]/IRF_store[irep,1,mm,mm])*scal[mm]
-    #   }
-    # }
+    for(qq in 1:bigQ){
+      imp_posterior[,,z,qq] <- apply(IRF_store[,,,z],c(2,3),quantile,quantiles[qq],na.rm=TRUE)
+    }
   }
   # calculate objects needed for HD and struc shock functions later---------------------------------------------
   # median quantitities
@@ -460,7 +478,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
 
 #' @name .irf.checks
 #' @noRd
-.irf.checks <- function(x=x, n.ahead=n.ahead, ident=ident, shockinfo=shockinfo, save.store=save.store, quantiles=quantiles){
+.irf.checks <- function(x=x, n.ahead=n.ahead, ident=ident, shockinfo=shockinfo, proxy=proxy, save.store=save.store, quantiles=quantiles){
   #-----------------------------------------------------------------------------------------------------#
   # check arguments
   if(!is.numeric(n.ahead) || n.ahead<1){
@@ -498,10 +516,11 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALS
       stop("Misspecification in 'sign'. Only the following is allowed: <, >, 0, ratio.H, ratio.avg")
     }
   }else if(ident=="proxy"){
-    if(!is.matrix(shockinfo)){
+    if(!all(c("shock","instr","scale")%in%colnames(shockinfo)))
+    if(!is.matrix(proxy)){
       stop("Please provide with argument 'shockinfo' matrix with instruments.")
     }
-    if(nrow(shockinfo)!=nrow(x$xglobal)){
+    if(nrow(proxy)!=nrow(x$xglobal) || nrow(proxy)!=nrow(x$xglobal-x$args$plag)){
       stop("Provide argument 'shockinfo' containing a matrix with same length as dataset used for estimation.")
     }
   }
@@ -522,6 +541,8 @@ get_shockinfo <- function(ident="chol", nr_rows=1){
   if(ident=="sign")
     return(data.frame(shock=rep(NA,nr_rows),restriction=rep(NA,nr_rows),sign=rep(NA,nr_rows),
                       horizon=rep(NA,nr_rows),scale=rep(NA,nr_rows),prob=rep(NA,nr_rows),info=rep(NA,nr_rows)))
+  if(ident=="proxy")
+    return(data.frame(shock=rep(NA,nr_rows),instr=rep(NA,nr_rows),scale=rep(NA,nr_rows)))
 }
 
 #' @name add_shockinfo

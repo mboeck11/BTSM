@@ -232,6 +232,8 @@
   bigT      <- nrow(xdat)
   bigK      <- ncol(xdat)
   varNames  <- colnames(xdat)
+  shockvars <- shockinfo$shock
+  instrvars <- shockinfo$instr
 
   # create dynamic multiplier
   PHIx <- array(0,c(bigK,bigK,plag+n.ahead+1)); dimnames(PHIx)[[1]] <- dimnames(PHIx)[[2]] <- varNames
@@ -246,34 +248,125 @@
   }
   PHI  <-  PHIx[,,(plag+1):(plag+n.ahead+1)]
 
-  # identification step
-  if(any(is.na(proxy))){
-    idx   <- which(is.na(proxy))
-    Eest  <- Emat[-idx,,drop=FALSE]
-    proxy <- proxy[-idx,,drop=FALSE]
-  }else{
-    Eest <- Emat
-  }
-  fitted.err <- lm(Eest[,1] ~ proxy)$fitted
-  b21ib11    <- t(lm(Eest[,-1] ~ fitted.err-1)$coef)
-  Sig11      <- matrix(Smat[1,1], 1, 1)
-  Sig21      <- matrix(Smat[2:bigK,1],bigK-1,1)
-  Sig12      <- matrix(Smat[1,2:bigK],1,bigK-1)
-  Sig22      <- matrix(Smat[2:bigK,2:bigK],bigK-1,bigK-1)
-  ZZp        <- b21ib11%*%Sig11%*%t(b21ib11) - Sig21%*%t(b21ib11)+b21ib11%*%t(Sig21)+Sig22
-  b12b12p    <- t(Sig21-b21ib11%*%Sig11)%*%solve(ZZp)%*%(Sig21-b21ib11%*%Sig11)
-  b11b11p    <- Sig11 - b12b12p
-  if(b11b11p<0){
-    return(list(impl=NA,rot=NA,eps=NA))
-  }
-  b11        <- sqrt(b11b11p)
-  shock      <- c(b11, b21ib11*c(b11))
-  shock      <- shock/shock[1] # normalize to unit shock
-
   randMat <- matrix(rnorm(bigK*bigK,0,1),bigK,bigK)
   Q <- qr(randMat)
   Q <- qr.Q(Q)
-  Q[,1] <- shock
+
+  # identification of shocks
+  option <- 1
+
+  # option 1
+  if(option == 1){
+    for(ss in 1:length(shockvars)){
+      proxyVar <- proxy[,instrvars[ss],drop=FALSE]
+      iP  <- which(varNames==shockvars[ss])
+      niP <- (1:bigK)[-iP]
+      res <- cbind(Emat[,iP],Emat[,niP])
+      # adjust length in case of NAs
+      if(any(is.na(proxyVar))){
+        idx <- which(is.na(proxyVar))
+        proxyVar <- proxyVar[-idx,,drop=FALSE]
+        res <- res[-idx,,drop=FALSE]
+      }
+      Xdum   <- kronecker(diag(bigK), cbind(1,proxyVar))
+      betaIV <- solve(crossprod(Xdum))%*%crossprod(Xdum,matrix(res,ncol=1))
+      betaIV <- t(matrix(betaIV,nrow=nrow(betaIV)/bigK,bigK))
+
+      beta_11 <- betaIV[1,2]
+      beta_21 <- betaIV[-1,2,drop=FALSE]
+      B21B11  <- beta_21/beta_11
+
+      # fitted.err <- lm(res[,iP] ~ proxyVar)$fitted
+      # b21ib11    <- t(lm(res[,niP] ~ fitted.err)$coef)
+
+      SigmaU <- Smat[c(iP,niP),c(iP,niP)]
+      Zeta   <- B21B11%*%SigmaU[1,1]%*%t(B21B11) - SigmaU[2:bigK,1]%*%t(B21B11) + B21B11%*%t(SigmaU[1,2:bigK]) + SigmaU[2:bigK,2:bigK]
+      B12B12 <- t(SigmaU[2:bigK,1]-B21B11%*%SigmaU[1,1])%*%solve(Zeta)%*%(SigmaU[2:bigK,1]-B21B11%*%SigmaU[1,1])
+      B11B11 <- SigmaU[1,1] - B12B12
+      if(B11B11<0)
+        return(list(impl=NA,rot=NA,eps=NA))
+      B11    <- sqrt(B11B11)
+      shock  <- c(B11, B21B11*c(B11))
+      shock  <- shock/shock[1]
+
+      Q[c(iP,niP),iP] <- shock
+    }
+  }
+  ## option 2
+  if(option == 2){
+    m   <- ncol(proxy)
+    iP  <- which(varNames%in%shockvars)
+    niP <- (1:bigK)[-iP]
+    res <- cbind(Emat[,iP],Emat[,niP])
+    # adjust length in case of NAs
+    if(any(is.na(proxy))){
+      idx <- which(is.na(proxy))
+      proxy <- proxy[-idx,,drop=FALSE]
+      res <- res[-idx,,drop=FALSE]
+    }
+    Xdum   <- kronecker(diag(bigK), cbind(1,proxy))
+    betaIV <- solve(crossprod(Xdum))%*%crossprod(Xdum,matrix(res,ncol=1))
+    betaIV <- t(matrix(betaIV,nrow=nrow(betaIV)/bigK,bigK))
+
+    beta_11 <- betaIV[1:m,2:(m+1)]
+    beta_21 <- betaIV[(m+1):nrow(betaIV),2:(m+1),drop=FALSE]
+    B21B11  <- beta_21%*%solve(beta_11)
+
+    # fitted.err <- lm(res[,iP] ~ proxyVar)$fitted
+    # b21ib11    <- t(lm(res[,niP] ~ fitted.err)$coef)
+
+    SigmaU <- Smat[c(iP,niP),c(iP,niP)]
+    Zeta   <- B21B11%*%SigmaU[1:m,1:m]%*%t(B21B11) - SigmaU[(m+1):bigK,1:m]%*%t(B21B11) + B21B11%*%t(SigmaU[(m+1):bigK,1:m]) + SigmaU[(m+1):bigK,(m+1):bigK]
+    B12B12 <- t(SigmaU[(m+1):bigK,1:m]-B21B11%*%SigmaU[1:m,1:m])%*%solve(Zeta)%*%(SigmaU[(m+1):bigK,1:m]-B21B11%*%SigmaU[1:m,1:m])
+    B11B11 <- SigmaU[1:m,1:m] - B12B12
+
+    if(m == 1){
+      B11    <- sqrt(B11B11)
+      shock  <- c(B11, B21B11*c(B11))
+      shock  <- shock/shock[1]
+
+      Q[c(iP,niP),iP] <- shock
+    }else{
+      B22B22 <- SigmaU[(m+1):bigK,(m+1):bigK] + B21B11%*%(B12B12 - SigmaU[1:m,1:m])%*%t(B21B11)
+      B12B22 <- (B12B12%*%t(B21B11) + t(SigmaU[(m+1):bigK,1:m] - B21B11%*%SigmaU[1:m,1:m]))%*%solve(B22B22)
+      B11S1  <- diag(m) - B12B22%*%B21B11
+      B21S1  <- B21B11%*%solve(B11S1)
+      S1S1   <- B11S1%*%B11B11%*%t(B11S1)
+      S1     <- try(t(chol(S1S1)),silent=TRUE)
+      if(is(S1,"try-error"))
+        return(list(impl=NA,rot=NA,eps=NA))
+      shock  <- rbind(solve(B11S1), B21S1)%*%S1
+
+      Q[c(iP,niP),iP] <- shock
+    }
+
+    # # F stat (regression on instruments of relevant innovations)
+    # tempX  <- cbind(1, proxy)
+    # tempU  <- res[,1:m] - tempX%*%t(betaIV[1:m,])
+    # tempY  <- tempX%*%t(betaIV[1:m,]) - matrix(mean(res[,1:m]),nrow(res),m); k <- length(betaIV[1:m,])-1
+    # F_stat <- (t(tempY)%*%tempY/k)%*%solve(t(tempU)%*%tempU/(nrow(tempU)-k-1))
+  }
+
+  # fitted.err <- lm(Eest[,1] ~ proxy)$fitted
+  # b21ib11    <- t(lm(Eest[,-1] ~ fitted.err-1)$coef)
+  # Sig11      <- matrix(Smat[1,1], 1, 1)
+  # Sig21      <- matrix(Smat[2:bigK,1],bigK-1,1)
+  # Sig12      <- matrix(Smat[1,2:bigK],1,bigK-1)
+  # Sig22      <- matrix(Smat[2:bigK,2:bigK],bigK-1,bigK-1)
+  # ZZp        <- b21ib11%*%Sig11%*%t(b21ib11) - Sig21%*%t(b21ib11)+b21ib11%*%t(Sig21)+Sig22
+  # b12b12p    <- t(Sig21-b21ib11%*%Sig11)%*%solve(ZZp)%*%(Sig21-b21ib11%*%Sig11)
+  # b11b11p    <- Sig11 - b12b12p
+  # if(b11b11p<0){
+  #   return(list(impl=NA,rot=NA,eps=NA))
+  # }
+  # b11        <- sqrt(b11b11p)
+  # shock      <- c(b11, b21ib11*c(b11))
+  # shock      <- shock/shock[1] # normalize to unit shock
+  #
+  # randMat <- matrix(rnorm(bigK*bigK,0,1),bigK,bigK)
+  # Q <- qr(randMat)
+  # Q <- qr.Q(Q)
+  # Q[,1] <- shock
 
   # computing impulse response function
   irfa  <- array(0,c(n.ahead,bigK,bigK)); dimnames(irfa)[[2]] <- dimnames(irfa)[[3]] <- varNames
