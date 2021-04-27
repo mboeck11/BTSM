@@ -11,11 +11,13 @@ irf(x, n.ahead=24, ident=NULL, shockinfo=NULL, save.store=FALSE,
 \arguments{
 \item{x}{object of class \code{bvar}.}
 
-\item{n.ahead}{forecasting horizon.}
+\item{n.ahead}{Forecasting horizon.}
 
-\item{ident}{preferred identification scheme.}
+\item{ident}{Preferred identification scheme.}
 
-\item{shockinfo}{dataframe with specified details on shock}
+\item{shockinfo}{Dataframe with specified details on the shock.}
+
+\item{proxy}{Matrix with proxy variables.}
 
 \item{save.store}{If set to \code{TRUE} the full posterior is returned. Default is set to \code{FALSE} in order to save storage.}
 

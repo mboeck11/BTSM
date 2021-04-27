@@ -81,7 +81,7 @@ bivar.sim <- function(len, M=3, plag=1, cons=TRUE, SV=FALSE, type="dummy", share
       colnames(Abig) <- colnames(Yraw)
     }
     if(cons){
-      xlag <- cbind(xlag,1,1)
+      xlag <- cbind(xlag,1,Draw[tt,,drop=FALSE])
       Abig <- rbind(Abig,a0.true,a1.true)
       colnames(xlag)[(M*plag*2+1):ncol(xlag)] <- rownames(Abig)[(M*plag*2+1):nrow(Abig)] <- c("cons","cons.interaction")
     }

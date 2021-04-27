@@ -228,7 +228,7 @@
     colnames(X)[(ncol(X)-Ki):ncol(X)] <- c("trend",paste0("Dtrend",seq(1,Ki)))
   }
 
-  k     <- ncol(X)
+  k <- ncol(X)
   n <- k*M
   v <- (M*(M-1))/2
   #---------------------------------------------------------------------------------------------------------
@@ -280,12 +280,12 @@
     XtXinv1 <- solve(crossprod(X1))
     temp    <- XtXinv1%*%t(X1)%*%Y[,mm]
     A_OLS[,mm]  <- temp[((mm-1)*Ki1+1):nrow(temp),]
-    if(mm>1) for(kk in 1:Ki1) J_OLS[mm,1:(mm-1),kk] <- temp[(mm-2)*Ki1+kk,]
+    if(mm>1) for(kk in 1:Ki1) J_OLS[mm,1:(mm-1),kk] <- -temp[DYmat[kk,1:(mm-1)],] # alternativ: seq(kk,(mm-1)*Ki1,by=Ki1)
     E_OLS[,mm]   <- Y[,mm] - X1%*%temp
     S_OLS[mm,mm] <- crossprod(E_OLS[,mm])/(bigT-ncol(X1))
     temp         <- diag(XtXinv1*S_OLS[mm,mm])
     V_OLS[,mm] <- temp[((mm-1)*Ki1+1):length(temp)]
-    if(mm>1) for(kk in 1:Ki1) Z_OLS[mm,1:(mm-1),kk] <- temp[(mm-2)*Ki1+kk]
+    if(mm>1) for(kk in 1:Ki1) Z_OLS[mm,1:(mm-1),kk] <- temp[DYmat[kk,1:(mm-1)]]
   }
   #---------------------------------------------------------------------------------------------------------
   # Initial Values
@@ -425,9 +425,9 @@
       Aprior    <- A_prior[,mm,drop=FALSE]
       Vprior    <- theta[,mm,drop=FALSE]
       if(mm>1) {
-        for(kk in 1:Ki1) {
-          Aprior <- rbind(matrix(J_prior[mm,1:(mm-1),kk],mm-1,1),Aprior)
-          Vprior <- rbind(matrix(zeta[mm,1:(mm-1),kk],mm-1,1),Vprior)
+        for(ll in (mm-1):1){
+          Aprior <- rbind(matrix(J_prior[mm,ll,],Ki1,1), Aprior)
+          Vprior <- rbind(matrix(zeta[mm,ll,],Ki1,1), Vprior)
         }
       }
       Vpriorinv <- diag(1/c(Vprior))
@@ -439,7 +439,7 @@
       A.draw.i <- try(A_post+t(chol(V_post))%*%rnorm(ncol(X.i)),silent=TRUE)
       if (is(A.draw.i,"try-error")) A.draw.i <- mvrnorm(1,A_post,V_post)
       A_draw[,mm] <- A.draw.i[((mm-1)*(1+Ki)+1):nrow(A.draw.i),]
-      if(mm>1) for(kk in 1:Ki1) J_draw[mm,1:(mm-1),kk] <- -A.draw.i[(mm-2)*Ki1+kk,]
+      if(mm>1) for(kk in 1:Ki1) J_draw[mm,1:(mm-1),kk] <- -A.draw.i[DYmat[kk,1:(mm-1)],]
       Em_str[,mm] <- Y[,mm]-X1%*%A.draw.i
     }
     #----------------------------------------------------------------------------
@@ -629,7 +629,7 @@
       for (jj in 1:M){
         para   <- as.list(pars_var[,jj])
         para$nu = Inf; para$rho=0; para$beta<-0
-        svdraw <- svsample_fast_cpp(y=Em[,jj], draws=1, burnin=0, designmatrix=matrix(NA_real_),
+        svdraw <- svsample_fast_cpp(y=Em_str[,jj], draws=1, burnin=0, designmatrix=matrix(NA_real_),
                                     priorspec=Sv_priors, thinpara=1, thinlatent=1, keeptime="all",
                                     startpara=para, startlatent=Sv_draw[,jj],
                                     keeptau=FALSE, print_settings=list(quiet=TRUE, n_chains=1, chain=1),

@@ -317,7 +317,6 @@ double MH_step(double current_val, double c_tuning_par, int d, double scale_par,
   res_protector(res);
 
   return res;
-
 }
 
 

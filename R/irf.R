@@ -539,7 +539,7 @@ get_shockinfo <- function(ident="chol", nr_rows=1){
   if(ident=="chol")
     return(data.frame(shock=rep(NA,nr_rows),scale=rep(NA,nr_rows)))
   if(ident=="sign")
-    return(data.frame(shock=rep(NA,nr_rows),restriction=rep(NA,nr_rows),sign=rep(NA,nr_rows),
+    return(data.frame(shock=rep(NA,nr_rows),restrictions=rep(NA,nr_rows),sign=rep(NA,nr_rows),
                       horizon=rep(NA,nr_rows),scale=rep(NA,nr_rows),prob=rep(NA,nr_rows),info=rep(NA,nr_rows)))
   if(ident=="proxy")
     return(data.frame(shock=rep(NA,nr_rows),instr=rep(NA,nr_rows),scale=rep(NA,nr_rows)))
@@ -548,11 +548,11 @@ get_shockinfo <- function(ident="chol", nr_rows=1){
 #' @name add_shockinfo
 #' @title Adding shocks to 'shockinfo' argument
 #' @description Adds automatically rows to 'shockinfo' data.frame for appropriate use in \code{irf}.
-#' @usage add_shockinfo(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NULL, horizon=NULL,
+#' @usage add_shockinfo(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL,
 #' prob=NULL, scale=NULL, horizon.fillup=TRUE)
 #' @param shockinfo Dataframe to append shocks. If \code{shockinfo=NULL} appropriate dataframe for sign-restrictions will be created.
 #' @param shock String element. Variable of interest for structural shock. Only possible to add restrictions to one structural shock at a time.
-#' @param restriction Character vector with variables that are supposed to be sign restricted.
+#' @param restrictions Character vector with variables that are supposed to be sign restricted.
 #' @param sign Character vector with signs.
 #' @param horizon Numeric vector with horizons to which restriction should hold. Set \code{horizon.fillup} to \code{FALSE} to just restrict one specific horizon.
 #' @param prob Number between zero and one determining the probability with which restriction is supposed to hold.
@@ -561,7 +561,7 @@ get_shockinfo <- function(ident="chol", nr_rows=1){
 #' @details This is only possible for sign restriction, hence if \code{ident="sign"} in \code{get_shockinfo()}.
 #' @seealso \code{\link{irf}}
 #' @export
-add_shockinfo <- function(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NULL, horizon=NULL, prob=NULL, scale=NULL, horizon.fillup=TRUE){
+add_shockinfo <- function(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL, prob=NULL, scale=NULL, horizon.fillup=TRUE){
   if(is.null(shockinfo)){
     shockinfo <- get_shockinfo(ident="sign")
   }
@@ -571,14 +571,14 @@ add_shockinfo <- function(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NUL
   if(length(shock)>1){
     stop("Please only specify one structural shock at once.")
   }
-  if(is.null(restriction) || is.null(sign)){
-    stop("Please specify 'restriction' together with 'sign'.")
+  if(is.null(restrictions) || is.null(sign)){
+    stop("Please specify 'restrictions' together with 'sign'.")
   }
-  if(length(restriction)!=length(sign) || length(restriction)!=length(horizon) || length(sign)!=length(horizon)){
-    if(length(horizon)!=1) stop("Please provide the arguments 'restriction' and 'sign' with equal length. Please respecify.")
+  if(length(restrictions)!=length(sign) || length(restrictions)!=length(horizon) || length(sign)!=length(horizon)){
+    if(length(horizon)!=1) stop("Please provide the arguments 'restrictions' and 'sign' with equal length. Please respecify.")
   }
   nr <- length(sign)
-  if(!(is.null(restriction) && is.null(sign)) && is.null(horizon)){
+  if(!(is.null(restrictions) && is.null(sign)) && is.null(horizon)){
     warning("No horizon specified, is set to one, i.e., a shock restriction on impact.")
     horizon <- rep(1,nr)
   }
@@ -612,7 +612,7 @@ add_shockinfo <- function(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NUL
   idx_r  <- which(sign%in%c("ratio.H","ratio.avg"))
   if(any(horizon[idx_nr]>1) && horizon.fillup){
     repetition <- c(horizon[idx_nr],rep(1,length(idx_r)))
-    restriction <- rep(restriction, repetition)
+    restrictions <- rep(restrictions, repetition)
     sign <- rep(sign, repetition)
     prob <- rep(prob, repetition)
     scale <- rep(scale, repetition)
@@ -624,7 +624,7 @@ add_shockinfo <- function(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NUL
   for(nn in 1:nr){
     shockinfo[nt+nn,] <- NA
     shockinfo$shock[nt+nn] <- shock
-    shockinfo$restriction[nt+nn] <- restriction[nn]
+    shockinfo$restrictions[nt+nn] <- restrictions[nn]
     shockinfo$sign[nt+nn] <- sign[nn]
     shockinfo$horizon[nt+nn] <- horizon[nn]
     shockinfo$prob[nt+nn] <- prob[nn]
