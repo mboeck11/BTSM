@@ -38,10 +38,13 @@ fevd.bvar.irf <- function(x, R=NULL, var.slct=NULL, verbose=TRUE){
     if(verbose) cat("Identification scheme: Sign-restrictions provided.\n")
   }else if(ident=="chol"){
     if(verbose) cat("Identification scheme: Short-run restrictions via Cholesky decomposition.\n")
+  }else if(ident=="proxy"){
+    if(verbose)
+      cat("Identification schem: Identification via proxy variable.\n")
   }
   #-------------------- some checks ------------------------------------------------------------------#
-  if(!ident%in%c("sign","chol")){
-    stop("FEVD implemented for shocks identified via cholesky ordering or sign restrictions only.")
+  if(!ident%in%c("sign","chol","proxy")){
+    stop("FEVD implemented for shocks identified via cholesky ordering, sign restrictions and external instruments only.")
   }
   if(!is.null(var.slct)){
     if(!all(var.slct%in%varNames)){
@@ -58,7 +61,7 @@ fevd.bvar.irf <- function(x, R=NULL, var.slct=NULL, verbose=TRUE){
   }
   if(ident=="sign" && is.null(R)){
     R <- x$struc.obj$Rmed
-  }else if(ident=="chol"){
+  }else{
     R<-diag(bigK)
   }
   rownames(R) <- colnames(R) <- varNames
@@ -79,7 +82,9 @@ fevd.bvar.irf <- function(x, R=NULL, var.slct=NULL, verbose=TRUE){
   if(verbose) cat("Start computing FEVDs...\n")
   vslct <- diag(bigK)
   P0G   <- t(chol(Smat))
-  scale <-  1/diag(P0G)
+  if(ident == "proxy"){
+    P0G <- x$struc.obj$Rmed
+  }
 
   FEVDres  <-  array(0,dim=c(bigK,length(var.slct),horizon+1))
   dimnames(FEVDres) <- list(varNames,paste("Decomp. of",var.slct),0:horizon)

@@ -256,6 +256,8 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
 #' @noRd
 #' @importFrom stats median
 #' @importFrom stringr str_pad
+#' @importFrom lmtest coeftest waldtest
+#' @importFrom sandwich vcovHC
 #' @importFrom utils object.size
 .irf.generator <- function(x,n.ahead=24,ident=NULL,shockinfo=NULL,proxy=NULL,save.store=FALSE,applyfun=NULL,cores=NULL,quantiles=c(.05,.10,.16,.50,.84,.90,.95),verbose=TRUE){
   #------------------------------ get stuff -------------------------------------------------------#
@@ -273,6 +275,7 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
   varNames    <- colnames(xglobal)
   MaxTries    <- 7500
   Rmed        <- NULL
+  Fmed        <- NULL
   epsmed      <- NULL
   type        <- NULL
   rot.nr      <- NULL
@@ -332,6 +335,10 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
       rownames(shockinfo)<-seq(1,nrow(shockinfo))
     }
   }else if(ident%in%c("chol","chol-shortrun")){
+    if(is.null(shockinfo)){
+      shockinfo <- get_shockinfo("chol", nr_rows = length(varNames))
+      shockinfo$shock <- varNames
+    }
     select_shocks <- which(varNames%in%shockinfo$shock)
     shock.nr <- length(select_shocks)
     if(shock.nr == 0)
@@ -355,7 +362,6 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
     if(shock.nr == 0)
       stop("Please provide shock in the dataset. Respecify 'shockinfo' argument.")
     scale <- shockinfo$scale
-    irf.fun <- .irf.proxy
     if(nrow(proxy)==Traw){
       proxy <- proxy[(plag+1):Traw,,drop=FALSE]
     }else if(nrow(proxy)==bigT){
@@ -363,12 +369,14 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
     }else{
       stop("Please provide proxy of appropriate length!")
     }
+    irf.fun <- .irf.proxy
   }
   #--------------------------------------------------------------------------------------------------------#
   # initialize objects to save IRFs, HDs, etc.
   R_store       <- array(NA, dim=c(thindraws,bigK,bigK))
   IRF_store     <- array(NA, dim=c(thindraws,n.ahead,bigK,bigK));dimnames(IRF_store)[[3]] <- varNames
   eps_store     <- array(NA, dim=c(thindraws,bigT,bigK));dimnames(eps_store)[[3]]<-varNames
+  F_store       <- array(NA, dim=c(thindraws,4,bigK), dimnames=list(NULL,c("F_test","rob-F_test","F_test_lag","rob-F_test_lag"),varNames))
   #------------------------------ start computing irfs  ---------------------------------------------------#
   start.comp <- Sys.time()
   imp.obj <- applyfun(1:thindraws,function(irep){
@@ -383,13 +391,14 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
         cat("\n",as.character(Sys.time()), "MCMC draw", irep, ": no rotation found", "\n")
       }
     }
-    return(list(impl=imp.obj$impl,rot=imp.obj$rot,eps=imp.obj$eps))
+    return(list(impl=imp.obj$impl,rot=imp.obj$rot,eps=imp.obj$eps,F_stats=imp.obj$F_stats))
   })
   for(irep in 1:thindraws){
     if(all(is.na(imp.obj[[irep]]$impl))) next
     IRF_store[irep,,,] <- imp.obj[[irep]]$impl
     R_store[irep,,]    <- imp.obj[[irep]]$rot
     eps_store[irep,,]  <- imp.obj[[irep]]$eps
+    if(ident == "proxy") F_store[irep,,] <- imp.obj[[irep]]$F_stats
   }
   end.comp <- Sys.time()
   diff.comp <- difftime(end.comp,start.comp,units="mins")
@@ -430,38 +439,64 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
   }
   # Subset to shocks under consideration
   IRF_store <- IRF_store[,,,select_shocks,drop=FALSE]
+  F_store   <- F_store[,,select_shocks,drop=FALSE]
   imp_posterior <- array(NA, dim=c(n.ahead,bigK,shock.nr,bigQ),
                          dimnames=list(1:n.ahead, colnames(xglobal),paste("shock",colnames(xglobal)[select_shocks],sep="_"),
                                        paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")))
+  F_posterior <- array(NA, dim=c(4,shock.nr,bigQ), dimnames=list(c("F_test","rob-F_test","F_test_lag","rob-F_test_lag"),
+                                                              paste("shock",colnames(xglobal)[select_shocks],sep="_"),
+                                                              paste("Q",str_pad(gsub("0\\.","",quantiles),width=2,side="right",pad="0"),sep=".")))
   # Normalization
   for(z in 1:shock.nr)
   {
-    Mean<-IRF_store[,1,select_shocks[z],z]
+    if(scale[z] == "sd"){
+      if(ident == "chol"){
+        Mean<-IRF_store[,1,select_shocks[z],z]
+        scale_use <- sd(xglobal[,select_shocks[z]])
+      }else if(ident == "proxy"){
+        Mean <- rep(1,thindraws)
+        scale_use <- 1
+      }
+    }else{
+      Mean<-IRF_store[,1,select_shocks[z],z]
+      scale_use <- scale[z]
+    }
     for(irep in 1:thindraws){
-      IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scale[z]
+      IRF_store[irep,,,z]<-(IRF_store[irep,,,z]/Mean[irep])*scale_use
     }
     for(qq in 1:bigQ){
       imp_posterior[,,z,qq] <- apply(IRF_store[,,,z],c(2,3),quantile,quantiles[qq],na.rm=TRUE)
+      if(ident=="proxy") F_posterior[,z,qq] <- apply(F_store[,,z],2,quantile,quantiles[qq],na.rm=TRUE)
     }
   }
   # calculate objects needed for HD and struc shock functions later---------------------------------------------
   # median quantitities
-  Amat <- apply(A_large,c(2,3),median)
-  Smat <- apply(S_large,c(2,3),median)
-  Emat <- apply(E_large,c(2,3),median)
-  if(ident=="sign"){
-    imp.obj    <- try(irf(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat,Smat=Smat,Emat=Emat,shockinfo=shockinfo,MaxTries=MaxTries),silent=TRUE)
-    if(!is(imp.obj,"try-error")){
-      Rmed<-imp.obj$rot
-      epsmed<-imp.obj$eps
-    }else{
-      Rmed<-epsmed<-NULL
+  Amat <- array(NA_real_, c(bigQ, dim(A_large)[2:3]))
+  Smat <- array(NA_real_, c(bigQ, bigK, bigK))
+  Emat <- array(NA_real_, c(bigQ, dim(E_large)[2:3]))
+  for(qq in 1:bigQ){
+    Amat[qq,,] = apply(A_large,c(2,3), quantile, quantiles[qq], na.rm=TRUE)
+    Smat[qq,,] = apply(S_large,c(2,3), quantile, quantiles[qq], na.rm=TRUE)
+    Emat[qq,,] = apply(E_large,c(2,3), quantile, quantiles[qq], na.rm=TRUE)
+  }
+  if(ident == "sign" || ident == "proxy"){
+    Rmed<-epsmed<-Fmed<-list()
+    for(qq in 1:bigQ){
+      imp.obj <- try(irf.fun(xdat=xdat,plag=plag,n.ahead=n.ahead,Amat=Amat[qq,,],Smat=Smat[qq,,],shockinfo=shockinfo,MaxTries=MaxTries,type=type,Emat=Emat[qq,,],proxy=proxy),silent=TRUE)
+      if(!is(imp.obj,"try-error")){
+        Rmed[[qq]]<-imp.obj$rot
+        epsmed[[qq]]<-imp.obj$eps
+        if(ident=="proxy") Fmed[[qq]]<-imp.obj$F_stats else Fmed<-NULL
+      }else{
+        Rmed[[qq]]<-epsmed[[qq]]<-Fmed[[qq]]<-NULL
+      }
     }
   }
-  struc.obj <- list(Amat=Amat,Smat=Smat,Emat=Emat,Rmed=Rmed,epsmed=epsmed)
+  struc.obj <- list(Amat=Amat,Smat=Smat,Emat=Emat,Rmed=Rmed,epsmed=epsmed,Fmed=Fmed)
   model.obj <- list(xglobal=xglobal,plag=plag,cons=x$args$cons,trend=x$args$trend)
   #--------------------------------- prepare output----------------------------------------------------------------------#
   out <- structure(list("posterior"   = imp_posterior,
+                        "F_posterior" = F_posterior,
                         "ident"       = ident,
                         "rot.nr"      = rot.nr,
                         "shockinfo"   = shockinfo,
@@ -470,8 +505,11 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
                    class="bvar.irf")
   if(save.store){
     out$IRF_store = IRF_store
+    out$A_large   = A_large
+    out$S_large   = S_large
     out$eps_store = eps_store
     out$R_store   = R_store
+    if(ident == "proxy") out$F_store   = F_store
   }
   return(out)
 }

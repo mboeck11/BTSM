@@ -228,12 +228,13 @@
 #' @name .irf.proxy
 #' @importFrom stats lm
 #' @noRd
-.irf.proxy <- function(xdat,plag,n.ahead,Amat,Smat,Emat,proxy,...){
+.irf.proxy <- function(xdat,plag,n.ahead,Amat,Smat,Emat,proxy,shockinfo,...){
   bigT      <- nrow(xdat)
   bigK      <- ncol(xdat)
   varNames  <- colnames(xdat)
   shockvars <- shockinfo$shock
   instrvars <- shockinfo$instr
+  sd        <- ifelse(shockinfo$scale=="sd", TRUE, FALSE)
 
   # create dynamic multiplier
   PHIx <- array(0,c(bigK,bigK,plag+n.ahead+1)); dimnames(PHIx)[[1]] <- dimnames(PHIx)[[2]] <- varNames
@@ -254,6 +255,8 @@
 
   # identification of shocks
   option <- 1
+
+  F_stats <- matrix(NA, 4, bigK, dimnames=list(c("F_test","rob-F_test","F_test_lag","rob-F_test_lag"), varNames))
 
   # option 1
   if(option == 1){
@@ -287,9 +290,33 @@
         return(list(impl=NA,rot=NA,eps=NA))
       B11    <- sqrt(B11B11)
       shock  <- c(B11, B21B11*c(B11))
-      shock  <- shock/shock[1]
+      if(!sd)
+        shock  <- shock/shock[1]
 
       Q[c(iP,niP),iP] <- shock
+
+      # # F stat (regression on instruments of relevant innovations)
+      # tempX  <- cbind(1, proxyVar)
+      # tempU  <- res[,iP] - tempX%*%t(betaIV[iP,,drop=FALSE])
+      # tempY  <- tempX%*%t(betaIV[iP,,drop=FALSE]) - matrix(mean(res[,iP]),nrow(res),1)
+      # k <- length(betaIV[iP,])-1
+      # F_stat <- (t(tempY)%*%tempY/k)%*%solve(t(tempU)%*%tempU/(nrow(tempU)-k-1))
+
+      # F-test
+      reg1 <- lm(res[,iP]~proxyVar)
+      reg0 <- lm(res[,iP]~1)
+      F_stats[1,iP] = anova(reg0, reg1)$F[2]
+      F_stats[2,iP] = waldtest(reg0, reg1, vcov=vcovHC(reg1, type="HC3"))$F[2]
+
+      # lags as controls
+      proxyVarlag <- cbind(proxyVar, mlag(proxyVar, plag, 1))
+      proxyVarlag <- proxyVarlag[(plag+1):nrow(proxyVarlag),,drop=FALSE]
+      resuse      <- res[(plag+1):nrow(res),iP,drop=FALSE]
+
+      reg1  <- lm(resuse~proxyVarlag)
+      reg0 <- lm(resuse~1)
+      F_stats[3,iP] = anova(reg0, reg1)$F[2]
+      F_stats[4,iP] = waldtest(reg0, reg1, vcov=vcovHC(reg1, type="HC3"))$F[2]
     }
   }
   ## option 2
@@ -376,7 +403,7 @@
   # computing structural errors
   eps <- Emat%*%Q
 
-  return(list(impl=irfa,rot=Q,eps=eps))
+  return(list(impl=irfa,rot=Q,eps=eps,F_stats=F_stats))
 }
 
 #' @name .irf.girf

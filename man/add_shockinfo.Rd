@@ -4,7 +4,7 @@
 \alias{add_shockinfo}
 \title{Adding shocks to 'shockinfo' argument}
 \usage{
-add_shockinfo(shockinfo=NULL, shock=NULL, restriction=NULL, sign=NULL, horizon=NULL,
+add_shockinfo(shockinfo=NULL, shock=NULL, restrictions=NULL, sign=NULL, horizon=NULL,
 prob=NULL, scale=NULL, horizon.fillup=TRUE)
 }
 \arguments{
@@ -12,7 +12,7 @@ prob=NULL, scale=NULL, horizon.fillup=TRUE)
 
 \item{shock}{String element. Variable of interest for structural shock. Only possible to add restrictions to one structural shock at a time.}
 
-\item{restriction}{Character vector with variables that are supposed to be sign restricted.}
+\item{restrictions}{Character vector with variables that are supposed to be sign restricted.}
 
 \item{sign}{Character vector with signs.}
 
