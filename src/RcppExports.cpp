@@ -6,6 +6,11 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // BVAR_linear
 List BVAR_linear(const SEXP Y_in, const SEXP p_in, const SEXP draws_in, const SEXP burnin_in, const SEXP cons_in, const SEXP trend_in, const SEXP sv_in, const SEXP thin_in, const SEXP prior_in, const SEXP hyperparam_in, const SEXP Ex_in);
 RcppExport SEXP _BTSM_BVAR_linear(SEXP Y_inSEXP, SEXP p_inSEXP, SEXP draws_inSEXP, SEXP burnin_inSEXP, SEXP cons_inSEXP, SEXP trend_inSEXP, SEXP sv_inSEXP, SEXP thin_inSEXP, SEXP prior_inSEXP, SEXP hyperparam_inSEXP, SEXP Ex_inSEXP) {

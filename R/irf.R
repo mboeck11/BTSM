@@ -369,6 +369,9 @@ irf.bivar <- function(x, n.ahead=24, ident=NULL, shockinfo=NULL, proxy=NULL, sav
     }else{
       stop("Please provide proxy of appropriate length!")
     }
+    if(!all(shockinfo$shock%in%varNames)){
+      stop("Please provide shocknames which are colnames of the dataset.")
+    }
     irf.fun <- .irf.proxy
   }
   #--------------------------------------------------------------------------------------------------------#

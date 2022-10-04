@@ -28,7 +28,7 @@
 #' @importFrom stats is.ts median time ts
 #' @importFrom xts is.xts
 #' @importFrom zoo coredata
-bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=FALSE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
+bvar<-function(Data,plag=1,draws=5000,burnin=5000,prior="NG",SV=TRUE,h=0,thin=1,hyperpara=NULL,eigen=FALSE,Ex=NULL,cons=TRUE,trend=FALSE,applyfun=NULL,cores=NULL,verbose=TRUE){
   start.bvar <- Sys.time()
   #--------------------------------- checks  ------------------------------------------------------#
   if(!is.matrix(Data)){

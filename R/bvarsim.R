@@ -42,7 +42,7 @@ bvar.sim <- function(len, M=3, plag=1, cons=FALSE, trend=FALSE, SV=FALSE){
   crit_eig <- 1.1; icounter<-0
   while(crit_eig>1.0 & icounter<1e4){
     icounter<-icounter+1
-    A.true   <- diag(M)*runif(1,0.7,0.9)
+    A.true   <- diag(M)*runif(M,0.7,0.9)
     A.true[upper.tri(A.true)] <- runif((M-1)*M/2,-0.2,0.2)
     A.true[lower.tri(A.true)] <- runif((M-1)*M/2,-0.2,0.2)
     crit_eig <- max(abs(Re(eigen(A.true)$values)))

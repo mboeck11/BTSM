@@ -234,7 +234,7 @@
   varNames  <- colnames(xdat)
   shockvars <- shockinfo$shock
   instrvars <- shockinfo$instr
-  sd        <- ifelse(shockinfo$scale=="sd", TRUE, FALSE)
+  scale     <- shockinfo$scale
 
   # create dynamic multiplier
   PHIx <- array(0,c(bigK,bigK,plag+n.ahead+1)); dimnames(PHIx)[[1]] <- dimnames(PHIx)[[2]] <- varNames
@@ -261,6 +261,7 @@
   # option 1
   if(option == 1){
     for(ss in 1:length(shockvars)){
+      sd <- ifelse(scale[ss]=="sd", TRUE, FALSE)
       proxyVar <- proxy[,instrvars[ss],drop=FALSE]
       iP  <- which(varNames==shockvars[ss])
       niP <- (1:bigK)[-iP]
@@ -309,7 +310,7 @@
       F_stats[2,iP] = waldtest(reg0, reg1, vcov=vcovHC(reg1, type="HC3"))$F[2]
 
       # lags as controls
-      proxyVarlag <- cbind(proxyVar, mlag(proxyVar, plag, 1))
+      proxyVarlag <- cbind(proxyVar, .mlag(proxyVar, plag))
       proxyVarlag <- proxyVarlag[(plag+1):nrow(proxyVarlag),,drop=FALSE]
       resuse      <- res[(plag+1):nrow(res),iP,drop=FALSE]
 

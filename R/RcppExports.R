@@ -7,8 +7,6 @@ BVAR_linear <- function(Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_i
     .Call(`_BTSM_BVAR_linear`, Y_in, p_in, draws_in, burnin_in, cons_in, trend_in, sv_in, thin_in, prior_in, hyperparam_in, Ex_in)
 }
 
-#' @name do_rgig1
-#' @noRd
 do_rgig1 <- function(lambda, chi, psi) {
     .Call(`_BTSM_do_rgig1`, lambda, chi, psi)
 }

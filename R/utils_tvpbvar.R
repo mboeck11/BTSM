@@ -371,7 +371,7 @@
     # alternative a la supplementary bitto/sfs s.3
     Vpriorsqrt <- diag(c(sqrt(tau2_draw),sqrt(xi2_draw)))
     V_poststar <- solve(Vpriorsqrt%*%crossprod(Zt)%*%Vpriorsqrt + diag(2*d))
-    V_post <- Vpriorsqrt%*%V_poststar%*%Vpriorsqrt
+    V_post     <- Vpriorsqrt%*%V_poststar%*%Vpriorsqrt
 
     A_post <- V_post%*%(crossprod(Zt,yt)+Vpriorinv%*%A_prior)
     alph_draw <- try(A_post+t(chol(V_post))%*%rnorm(ncol(Zt)),silent=TRUE)
@@ -440,7 +440,7 @@
     } # END PRIOR QUERY
     #----------------------------------------------------------------------------
     # Step 5: Sample variances
-    eps <- y - cbind(Xt,hadamard.prod(Xt,At_draw[2:(bigT+1),]))%*%alph_draw
+    eps <- y - cbind(X,hadamard.prod(X,At_draw[2:(bigT+1),]))%*%alph_draw
     if(sv){
       para <- as.list(pars_var); names(para) <- c("mu","phi","sigma","latent0")
       para$nu = Inf; para$rho=0; para$beta<-0
